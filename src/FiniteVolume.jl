@@ -1,6 +1,7 @@
 module FiniteVolume
 
 import IterativeSolvers
+import Preconditioners
 
 function mydist(x1, x2)
 	return sqrt((x1[1] - x2[1]) ^ 2 + (x1[2] - x2[2]) ^ 2 + (x1[3] - x2[3]) ^ 2)
@@ -36,16 +37,12 @@ function solvediffusion(volumes::Vector, neighbors::Array{Pair{Int, Int}, 1}, ar
 		end
 	end
 	@time A = sparse(I, J, V)
-	@time result = A \ b
-	#result = 1
-	#@time result, ch = IterativeSolvers.gmres(A, b; Pl=spdiagm(diag(A)), log=true, maxiter=200, restart=100)
-	#@time result, ch = IterativeSolvers.gmres(A, b; log=true, maxiter=100)
-	#=
+	@time iL, iU = Preconditioners.ilu0(A)
+	@time result, ch = IterativeSolvers.gmres(A, b; Pl=iL, Pr=iU, log=true, maxiter=400, restart=400)
 	@show vecnorm(result)
 	@show vecnorm(A * result - b)
 	@show vecnorm(b)
 	@show vecnorm(A * result - b) / vecnorm(b)
-	=#
 	return A, result, ch
 end
 
