@@ -3,7 +3,7 @@ import FiniteVolume
 import JLD
 import PyPlot
 
-neighbors, areasoverlengths, hycos, sources, dirichletnodes, dirichletheads = JLD.load("waffledata.jld", "neighbors", "areasoverlengths", "hycos", "sources", "dirichletnodes", "dirichletheads")
+@time neighbors, areasoverlengths, hycos, sources, dirichletnodes, dirichletheads = JLD.load("waffledata.jld", "neighbors", "areasoverlengths", "hycos", "sources", "dirichletnodes", "dirichletheads")
 
 #do the uniform hyco, no recharge case
 @time head, ch, A, b, freenode = FiniteVolume.solvediffusion(neighbors, areasoverlengths, ones(length(areasoverlengths)), zeros(length(sources)), dirichletnodes, dirichletheads)

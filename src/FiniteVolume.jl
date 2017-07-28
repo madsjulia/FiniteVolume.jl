@@ -49,7 +49,8 @@ function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::V
 	end
 	A = sparse(I, J, V, sum(freenode), sum(freenode), +)
 	M = PyAMG.aspreconditioner(PyAMG.RugeStubenSolver(A))
-	result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=400, restart=400, tol=1e-12)
+	result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=400, restart=400)
+	#result, ch = IterativeSolvers.cg(A, b; Pl=M, log=true, maxiter=400)
 	#result = PyAMG.solve(PyAMG.RugeStubenSolver(A), b, accel="cg", tol=1e-4)
 	#=
 	@time iL, iU = Preconditioners.ilu0(A)
