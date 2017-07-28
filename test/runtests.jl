@@ -12,5 +12,5 @@ volumes = ones(size(xs, 2))
 dirichletnodes = [1, 4]
 dirichletvalues = [1.0,  0.0]
 
-h = FiniteVolume.solvediffusion(volumes, neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletvalues)
+h, ch, A, B, freenode = FiniteVolume.solvediffusion(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletvalues)
 @test h ≈ [1.0, 2/3, 1/3, 0.0]

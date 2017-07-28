@@ -66,7 +66,7 @@ function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::V
 	=#
 	head = Array{Float64}(length(sources))
 	freenodessofar = 0
-	@time for i = 1:length(sources)
+	for i = 1:length(sources)
 		if freenode[i]
 			freenodessofar += 1
 			head[i] = result[freenodessofar]
