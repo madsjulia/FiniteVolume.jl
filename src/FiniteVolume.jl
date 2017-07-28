@@ -50,15 +50,23 @@ function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::V
 	A = sparse(I, J, V, sum(freenode), sum(freenode), +)
 	M = PyAMG.aspreconditioner(PyAMG.RugeStubenSolver(A))
 	result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=400, restart=400)
-	#result, ch = IterativeSolvers.cg(A, b; Pl=M, log=true, maxiter=400)
-	#result = PyAMG.solve(PyAMG.RugeStubenSolver(A), b, accel="cg", tol=1e-4)
+	#=
+	result, ch = IterativeSolvers.cg(A, b; Pl=M, log=true, maxiter=400)
+	@time result2 = PyAMG.solve(PyAMG.RugeStubenSolver(A), b, accel="cg", tol=sqrt(eps(Float64)))
+	@time result3 = PyAMG.solve(PyAMG.RugeStubenSolver(A, accel="cg"), b, tol=sqrt(eps(Float64)))
+	@time result4 = PyAMG.solve(PyAMG.SmoothedAggregationSolver(A, accel="cg"), b, tol=sqrt(eps(Float64)))
+	@show norm(A * result - b)
+	@show norm(A * result2 - b)
+	@show norm(A * result3 - b)
+	@show norm(A * result4 - b)
+	=#
 	#=
 	@time iL, iU = Preconditioners.ilu0(A)
 	@time result, ch = IterativeSolvers.gmres(A, b; Pl=iL, Pr=iU, log=true, maxiter=400, restart=400)
 	=#
 	head = Array{Float64}(length(sources))
 	freenodessofar = 0
-	for i = 1:length(sources)
+	@time for i = 1:length(sources)
 		if freenode[i]
 			freenodessofar += 1
 			head[i] = result[freenodessofar]
