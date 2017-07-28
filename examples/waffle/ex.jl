@@ -10,6 +10,7 @@ import PyPlot
 fehmhead = readdlm("data/w01.00007_sca_node.avs.hom_norecharge"; skipstart=2)[:, 2]
 @show norm(A * head[freenode] - b)
 @show norm(A * fehmhead[freenode] - b)
+@test norm(A * fehmhead[freenode] - b) / norm(b) < 1e-3
 @show norm(b)
 @show norm(head - fehmhead)
 @show mean(head - fehmhead)
@@ -24,6 +25,7 @@ PyPlot.close(fig)
 fehmhethead = readdlm("data/w01.00007_sca_node.avs.het_norecharge"; skipstart=2)[:, 2]
 @show norm(A * hethead[freenode] - b)
 @show norm(A * fehmhethead[freenode] - b)
+@test norm(A * fehmhethead[freenode] - b) / norm(b) < 1e-3
 @show norm(b)
 @show norm(hethead - fehmhethead)
 @show mean(hethead - fehmhethead)
@@ -38,6 +40,7 @@ PyPlot.close(fig)
 fehmfullhead = readdlm("data/w01.00007_sca_node.avs.het_recharge"; skipstart=2)[:, 2]
 @show norm(A * fullhead[freenode] - b)
 @show norm(A * fehmfullhead[freenode] - b)
+@test norm(A * fehmfullhead[freenode] - b) / norm(b) < 1e-3
 @show norm(b)
 @show norm(fullhead - fehmfullhead)
 @show mean(fullhead - fehmfullhead)

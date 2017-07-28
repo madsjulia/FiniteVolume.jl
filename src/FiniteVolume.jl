@@ -1,6 +1,7 @@
 module FiniteVolume
 
 import IterativeSolvers
+import LinearAdjoints
 #import Preconditioners
 import PyAMG
 
@@ -8,10 +9,7 @@ function mydist(x1, x2)
 	return sqrt((x1[1] - x2[1]) ^ 2 + (x1[2] - x2[2]) ^ 2 + (x1[3] - x2[3]) ^ 2)
 end
 
-function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector)
-	I = Int[]
-	J = Int[]
-	V = Float64[]
+function getnodei2dirichleti(sources, dirichletnodes)
 	nodei2dirichleti = fill(-1, length(sources))
 	for i = 1:length(dirichletnodes)
 		node = dirichletnodes[i]
@@ -20,34 +18,64 @@ function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::V
 			error("There cannot be a source at a Dirichlet node, but node $node is a Dirichlet node where a source is located.")
 		end
 	end
-	freenode = fill(true, length(sources))
+	return nodei2dirichleti
+end
+
+function getfreenodes(n, dirichletnodes)
+	freenode = fill(true, n)
 	freenode[dirichletnodes] = false
-	b = Array{Float64}(sum(freenode))
 	nodei2freenodei = fill(-1, length(freenode))
 	j = 1
 	for i = 1:length(freenode)
 		if freenode[i]
 			nodei2freenodei[i] = j
+			j += 1
+		end
+	end
+	return freenode, nodei2freenodei
+end
+
+@LinearAdjoints.assemblesparsematrix (conductivities, sources) u function assembleA(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector)
+	I = Int[]
+	J = Int[]
+	V = Float64[]
+	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
+	for (i, (node1, node2)) in enumerate(neighbors)
+		if freenode[node1] && node1 != node2
+			v = conductivities[i] * areasoverlengths[i]
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], conductivities[i] * areasoverlengths[i])
+			if freenode[node2]
+				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node2], -conductivities[i] * areasoverlengths[i])
+			end
+		end
+	end
+	return sparse(I, J, V, sum(freenode), sum(freenode), +)
+end
+
+@LinearAdjoints.assemblevector (kx, ky, kz, u_dV, fluxV, gwsink) b function assembleb(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector)
+	nodei2dirichleti = getnodei2dirichleti(sources, dirichletnodes)
+	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
+	b = Array{Float64}(sum(freenode))
+	j = 1
+	for i = 1:length(freenode)
+		if freenode[i]
 			b[j] = sources[i]
 			j += 1
 		end
 	end
 	for (i, (node1, node2)) in enumerate(neighbors)
 		if freenode[node1] && node1 != node2
-			v = conductivities[i] * areasoverlengths[i]
-			push!(I, nodei2freenodei[node1])
-			push!(J, nodei2freenodei[node1])
-			push!(V, v)
-			if freenode[node2]
-				push!(I, nodei2freenodei[node1])
-				push!(J, nodei2freenodei[node2])
-				push!(V, -v)
-			else
-				b[nodei2freenodei[node1]] += v * dirichletheads[nodei2dirichleti[node2]]
+			if !freenode[node2]
+				b[nodei2freenodei[node1]] += conductivities[i] * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]]
 			end
 		end
 	end
-	A = sparse(I, J, V, sum(freenode), sum(freenode), +)
+	return b
+end
+
+function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector)
+	A = assembleA(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads)
+	b = assembleb(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads)
 	M = PyAMG.aspreconditioner(PyAMG.RugeStubenSolver(A))
 	result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=400, restart=400)
 	#=
@@ -64,6 +92,8 @@ function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::V
 	@time iL, iU = Preconditioners.ilu0(A)
 	@time result, ch = IterativeSolvers.gmres(A, b; Pl=iL, Pr=iU, log=true, maxiter=400, restart=400)
 	=#
+	nodei2dirichleti = getnodei2dirichleti(sources, dirichletnodes)
+	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
 	head = Array{Float64}(length(sources))
 	freenodessofar = 0
 	for i = 1:length(sources)
