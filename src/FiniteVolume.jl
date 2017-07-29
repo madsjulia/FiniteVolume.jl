@@ -35,7 +35,7 @@ function getfreenodes(n, dirichletnodes)
 	return freenode, nodei2freenodei
 end
 
-@LinearAdjoints.assemblesparsematrix (conductivities, sources) u function assembleA(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector)
+@LinearAdjoints.assemblesparsematrix (conductivities, sources, dirichletheads) u function assembleA(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector)
 	I = Int[]
 	J = Int[]
 	V = Float64[]
@@ -52,7 +52,7 @@ end
 	return sparse(I, J, V, sum(freenode), sum(freenode), +)
 end
 
-@LinearAdjoints.assemblevector (kx, ky, kz, u_dV, fluxV, gwsink) b function assembleb(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector)
+@LinearAdjoints.assemblevector (conductivities, sources, dirichletheads) b function assembleb(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector)
 	nodei2dirichleti = getnodei2dirichleti(sources, dirichletnodes)
 	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
 	b = Array{Float64}(sum(freenode))
@@ -71,6 +71,22 @@ end
 		end
 	end
 	return b
+end
+
+function freenodes2nodes(result, sources, dirichletnodes, dirichletheads)
+	nodei2dirichleti = getnodei2dirichleti(sources, dirichletnodes)
+	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
+	head = Array{Float64}(length(sources))
+	freenodessofar = 0
+	for i = 1:length(sources)
+		if freenode[i]
+			freenodessofar += 1
+			head[i] = result[freenodessofar]
+		else
+			head[i] = dirichletheads[nodei2dirichleti[i]]
+		end
+	end
+	return head, freenode, nodei2freenodei
 end
 
 function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector)
@@ -92,18 +108,7 @@ function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::V
 	@time iL, iU = Preconditioners.ilu0(A)
 	@time result, ch = IterativeSolvers.gmres(A, b; Pl=iL, Pr=iU, log=true, maxiter=400, restart=400)
 	=#
-	nodei2dirichleti = getnodei2dirichleti(sources, dirichletnodes)
-	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
-	head = Array{Float64}(length(sources))
-	freenodessofar = 0
-	for i = 1:length(sources)
-		if freenode[i]
-			freenodessofar += 1
-			head[i] = result[freenodessofar]
-		else
-			head[i] = dirichletheads[nodei2dirichleti[i]]
-		end
-	end
+	head, freenode, nodei2freenodei = freenodes2nodes(result, sources, dirichletnodes, dirichletheads)
 	return head, ch, A, b, freenode
 end
 
