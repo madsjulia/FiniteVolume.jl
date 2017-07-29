@@ -8,7 +8,6 @@ doplot = false
 
 @time neighbors, areasoverlengths, hycos, sources, dirichletnodes, dirichletheads = JLD.load("waffledata.jld", "neighbors", "areasoverlengths", "hycos", "sources", "dirichletnodes", "dirichletheads")
 
-#=
 #do the uniform hyco, no recharge case
 @time head, ch, A, b, freenode = FiniteVolume.solvediffusion(neighbors, areasoverlengths, ones(length(areasoverlengths)), zeros(length(sources)), dirichletnodes, dirichletheads)
 fehmhead = readdlm("data/w01.00007_sca_node.avs.hom_norecharge"; skipstart=2)[:, 2]
@@ -42,7 +41,6 @@ if doplot
 	display(fig); println()
 	PyPlot.close(fig)
 end
-=#
 
 #do the heterogeneous hyco, recharge case
 @time fullhead, ch, A, b, freenode = FiniteVolume.solvediffusion(neighbors, areasoverlengths, hycos, sources, dirichletnodes, dirichletheads)
@@ -65,35 +63,18 @@ srand(0)
 const obsnodes = rand(1:length(sources), 30)
 const obsvalues = fullhead[obsnodes] + 0.1 * randn(length(obsnodes))
 const regularization = 1e-1
+if !isdefined(:regmat)
+	const regmat = FiniteVolume.hycoregularizationmatrix(neighbors, length(hycos), length(sources))
+else
+	println("skipping regmat")
+end
 function objfunc(u, neighbors, areasoverlengths, hycos, sources, dirichletnodes, dirichletheads)
 	of = 0.0
 	head, freenode, nodei2freenodei = FiniteVolume.freenodes2nodes(u, sources, dirichletnodes, dirichletheads)
 	for i = 1:length(obsnodes)
 		of += (obsvalues[i] - head[obsnodes[i]])^2
 	end
-	@show of
-	neighbordict = Dict{Int, Set{Int}}()
-	for i = 1:length(sources)
-		neighbordict[i] = Set{Int}()
-	end
-	for i = 1:length(neighbors)
-		node1, node2 = neighbors[i]
-		if node1 != node2
-			push!(neighbordict[node1], node2)
-			push!(neighbordict[node2], node1)
-		end
-	end
-	hycodict = Dict(zip(neighbors, hycos))
-	for i1 = 1:length(sources)
-		for i2 in neighbordict[i1]
-			for i3 in neighbordict[i1]
-				if i2 < i3
-					of += regularization * (hycodict[i1=>i2] - hycodict[i1=>i3])^2
-				end
-			end
-		end
-	end
-	@show of
+	of += regularization * norm(regmat * hycos)^2
 	return of
 end
 function objfunc_x(u, neighbors, areasoverlengths, hycos, sources, dirichletnodes, dirichletheads)
@@ -106,28 +87,7 @@ function objfunc_x(u, neighbors, areasoverlengths, hycos, sources, dirichletnode
 end
 function objfunc_p(u, neighbors, areasoverlengths, hycos, sources, dirichletnodes, dirichletheads)
 	of_p = zeros(sum(map(length, Any[hycos, sources, dirichletheads])))
-	neighbordict = Dict{Int, Set{Int}}()
-	for i = 1:length(sources)
-		neighbordict[i] = Set{Int}()
-	end
-	for i = 1:length(neighbors)
-		node1, node2 = neighbors[i]
-		if node1 != node2
-			push!(neighbordict[node1], node2)
-			push!(neighbordict[node2], node1)
-		end
-	end
-	hycoindices = Dict(zip(neighbors, 1:length(hycos)))
-	for i1 = 1:length(sources)
-		for i2 in neighbordict[i1]
-			for i3 in neighbordict[i1]
-				if i2 < i3
-					of_p[hycoindices[i1=>i2]] += 2 * regularization * (hycos[hycoindices[i1=>i2]] - hycos[hycoindices[i1=>i3]])
-					of_p[hycoindices[i1=>i3]] -= 2 * regularization * (hycos[hycoindices[i1=>i2]] - hycos[hycoindices[i1=>i3]])
-				end
-			end
-		end
-	end
+	of_p[1:length(hycos)] = (2 * regularization) * At_mul_B(regmat, (regmat * hycos))
 	return of_p
 end
 function setupsolver(A)
@@ -135,7 +95,6 @@ function setupsolver(A)
 	function solver(b, transpose=false)
 		#matrix is symmetric, so we don't need to deal with transpose
 		#result = PyAMG.solve(PyAMG.RugeStubenSolver(A), b, accel="cg", tol=sqrt(eps(Float64)))
-		#result = PyAMG.solve(PyAMG.RugeStubenSolver(A), b, accel="cg", tol=1e-10)
 		result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=400, restart=400, tol=1e-14)
 		if !ch.isconverged
 			warn("may not be converged")
@@ -168,4 +127,6 @@ for i = 1:length(is)
 	ofnew = objfunc(x)
 	smallgrad[i] = (ofnew - of) / deltax
 end
+@show smallgrad
+@show gradient[is]
 nothing
