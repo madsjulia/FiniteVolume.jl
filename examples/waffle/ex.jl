@@ -2,7 +2,9 @@ using Base.Test
 import FiniteVolume
 import JLD
 import LinearAdjoints
+import Optim
 import PyPlot
+import ReusableFunctions
 
 doplot = false
 
@@ -106,6 +108,8 @@ end
 @time u, of, gradient = adjoint(neighbors, areasoverlengths, hycos, sources, dirichletnodes, dirichletheads)
 adjointhead, freenode, nodei2freenodei = FiniteVolume.freenodes2nodes(u, sources, dirichletnodes, dirichletheads)
 
+r3adjoint = ReusableFunctions.maker3function(adjoint, "restarts")
+#compare the gradient to a finite difference gradient
 is = [rand(1:length(hycos), 2); length(hycos) + rand(1:length(sources), 2); length(hycos) + length(sources) + rand(1:length(dirichletheads), 2)]
 function objfunc(x)
 	global hycos
@@ -114,11 +118,13 @@ function objfunc(x)
 	thesehycos = x[1:length(hycos)]
 	thesesources = x[length(hycos) + 1:length(hycos) + length(sources)]
 	thesedirichletheads = x[length(hycos) + length(sources) + 1:length(hycos) + length(sources) + length(dirichletheads)]
-	@time u, of, gradient = adjoint(neighbors, areasoverlengths, thesehycos, thesesources, dirichletnodes, thesedirichletheads)
+	u, of, gradient = r3adjoint(neighbors, areasoverlengths, thesehycos, thesesources, dirichletnodes, thesedirichletheads)
+	@show of
 	return of
 end
-smallgrad = Array{Float64}(length(is))
 x0 = [hycos; sources; dirichletheads]
+#=
+smallgrad = Array{Float64}(length(is))
 deltax = 1e-8
 for i = 1:length(is)
 	@show i
@@ -129,4 +135,18 @@ for i = 1:length(is)
 end
 @show smallgrad
 @show gradient[is]
+=#
+
+function gradient!(x, storage)
+	global hycos
+	global sources
+	global dirichletheads
+	thesehycos = x[1:length(hycos)]
+	thesesources = x[length(hycos) + 1:length(hycos) + length(sources)]
+	thesedirichletheads = x[length(hycos) + length(sources) + 1:length(hycos) + length(sources) + length(dirichletheads)]
+	u, of, gradient = r3adjoint(neighbors, areasoverlengths, thesehycos, thesesources, dirichletnodes, thesedirichletheads)
+	@show of
+	copy!(storage, gradient)
+end
+opt = Optim.optimize(objfunc, gradient!, x0, Optim.LBFGS(), Optim.Options(iterations=13, show_trace=true))
 nothing
