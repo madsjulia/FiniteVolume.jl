@@ -32,9 +32,10 @@ for i = 1:length(flownodes)
 		sources[flownodes[i]] = -skds[i] * 1e-3#convert of kg/s to m^3/s
 	end
 end
-if !isdefined(:volumes)
-	volumes, areasoverlengths, neighbors = FEHM.parsestor(joinpath(dirname(@__FILE__), "data/tet.stor"))
-end
+volumes, areasoverlengths, neighbors = FEHM.parsestor(joinpath(dirname(@__FILE__), "data/tet.stor"))
+goodindices = filter(i->neighbors[i][1] < neighbors[i][2], 1:length(neighbors))
+areasoverlengths = areasoverlengths[goodindices]
+neighbors = neighbors[goodindices]
 hycos = FiniteVolume.fehmhyco2fvhyco(xs, ys, zs, kxs, kys, kzs, neighbors)
 
 JLD.save("waffledata.jld", "neighbors", neighbors, "areasoverlengths", areasoverlengths, "hycos", hycos, "sources", sources, "dirichletnodes", dirichletnodes, "dirichletheads", dirichletheads)

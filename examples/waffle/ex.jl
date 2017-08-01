@@ -64,7 +64,7 @@ end
 srand(0)
 const obsnodes = rand(1:length(sources), 30)
 const obsvalues = fullhead[obsnodes] + 0.1 * randn(length(obsnodes))
-const regularization = 1e-1
+const regularization = 1e0
 if !isdefined(:regmat)
 	const regmat = FiniteVolume.hycoregularizationmatrix(neighbors, length(hycos), length(sources))
 else
@@ -93,11 +93,12 @@ function objfunc_p(u, neighbors, areasoverlengths, hycos, sources, dirichletnode
 	return of_p
 end
 function setupsolver(A)
-	M = PyAMG.aspreconditioner(PyAMG.RugeStubenSolver(A))
+	#M = PyAMG.aspreconditioner(PyAMG.RugeStubenSolver(A))
+	rss = PyAMG.RugeStubenSolver(A)
 	function solver(b, transpose=false)
 		#matrix is symmetric, so we don't need to deal with transpose
-		#result = PyAMG.solve(PyAMG.RugeStubenSolver(A), b, accel="cg", tol=sqrt(eps(Float64)))
-		result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=400, restart=400, tol=1e-14)
+		result = PyAMG.solve(rss, b, accel="cg", tol=sqrt(eps(Float64)))
+		#result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=100, restart=100, tol=sqrt(eps(Float64)))
 		if !ch.isconverged
 			warn("may not be converged")
 		end
@@ -148,5 +149,15 @@ function gradient!(x, storage)
 	@show of
 	copy!(storage, gradient)
 end
-opt = Optim.optimize(objfunc, gradient!, x0, Optim.LBFGS(), Optim.Options(iterations=13, show_trace=true))
+@time opt = Optim.optimize(objfunc, gradient!, x0, Optim.LBFGS(), Optim.Options(iterations=10, show_trace=true))
+x = opt.minimizer
+opthycos = x[1:length(hycos)]
+optsources = x[length(hycos) + 1:length(hycos) + length(sources)]
+optdirichletheads = x[length(hycos) + length(sources) + 1:length(hycos) + length(sources) + length(dirichletheads)]
+u, of, gradient = r3adjoint(neighbors, areasoverlengths, opthycos, optsources, dirichletnodes, optdirichletheads)
+of = 0.0
+opthead, freenode, nodei2freenodei = FiniteVolume.freenodes2nodes(u, sources, dirichletnodes, dirichletheads)
+@show norm(obsvalues - opthead[obsnodes])^2
+@show norm(obsvalues - adjointhead[obsnodes])^2
+
 nothing

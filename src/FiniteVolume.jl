@@ -41,12 +41,15 @@ end
 	V = Float64[]
 	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
 	for (i, (node1, node2)) in enumerate(neighbors)
-		if freenode[node1] && node1 != node2
-			v = conductivities[i] * areasoverlengths[i]
+		if freenode[node1] && freenode[node2]
 			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], conductivities[i] * areasoverlengths[i])
-			if freenode[node2]
-				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node2], -conductivities[i] * areasoverlengths[i])
-			end
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node2], -conductivities[i] * areasoverlengths[i])
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node2], conductivities[i] * areasoverlengths[i])
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node1], -conductivities[i] * areasoverlengths[i])
+		elseif freenode[node1]
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], conductivities[i] * areasoverlengths[i])
+		elseif freenode[node2]
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node2], conductivities[i] * areasoverlengths[i])
 		end
 	end
 	return sparse(I, J, V, sum(freenode), sum(freenode), +)
@@ -64,10 +67,10 @@ end
 		end
 	end
 	for (i, (node1, node2)) in enumerate(neighbors)
-		if freenode[node1] && node1 != node2
-			if !freenode[node2]
-				b[nodei2freenodei[node1]] += conductivities[i] * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]]
-			end
+		if freenode[node1] && !freenode[node2]
+			b[nodei2freenodei[node1]] += conductivities[i] * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]]
+		elseif !freenode[node1] && freenode[node2]
+			b[nodei2freenodei[node2]] += conductivities[i] * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]]
 		end
 	end
 	return b
@@ -145,14 +148,16 @@ function hycoregularizationmatrix(neighbors, numhycos, numnodes)
 	hycoindices = Dict(zip(neighbors, 1:numhycos))
 	for i1 = 1:numnodes
 		for i2 in neighbordict[i1]
-			for i3 in neighbordict[i1]
-				if i2 != i3
-					push!(I, hycoindices[i1=>i2])
-					push!(J, hycoindices[i1=>i2])
-					push!(V, 1.0)
-					push!(I, hycoindices[i1=>i2])
-					push!(J, hycoindices[i1=>i3])
-					push!(V, -1.0)
+			if i1 < i2
+				for i3 in neighbordict[i1]
+					if i2 != i3 && i1 < i3
+						push!(I, hycoindices[i1=>i2])
+						push!(J, hycoindices[i1=>i2])
+						push!(V, 1.0)
+						push!(I, hycoindices[i1=>i2])
+						push!(J, hycoindices[i1=>i3])
+						push!(V, -1.0)
+					end
 				end
 			end
 		end
