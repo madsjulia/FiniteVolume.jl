@@ -130,7 +130,7 @@ function fehmhyco2fvhyco(xs, ys, zs, kxs, kys, kzs, neighbors)
 	return ks
 end
 
-function hycoregularizationmatrix(neighbors, numhycos, numnodes)
+function hycoregularizationmatrix(neighbors, numnodes)
 	I = Int[]
 	J = Int[]
 	V = Float64[]
@@ -145,7 +145,7 @@ function hycoregularizationmatrix(neighbors, numhycos, numnodes)
 			push!(neighbordict[node2], node1)
 		end
 	end
-	hycoindices = Dict(zip(neighbors, 1:numhycos))
+	hycoindices = Dict(zip(neighbors, 1:length(neighbors)))
 	for i1 = 1:numnodes
 		for i2 in neighbordict[i1]
 			if i1 < i2
@@ -162,7 +162,7 @@ function hycoregularizationmatrix(neighbors, numhycos, numnodes)
 			end
 		end
 	end
-	return sparse(I, J, V, numhycos, numhycos, +)
+	return sparse(I, J, V, length(neighbors), length(neighbors), +)
 end
 
 end

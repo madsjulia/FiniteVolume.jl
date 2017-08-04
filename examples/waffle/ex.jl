@@ -66,7 +66,7 @@ const obsnodes = rand(1:length(sources), 30)
 const obsvalues = fullhead[obsnodes] + 0.1 * randn(length(obsnodes))
 const regularization = 1e0
 if !isdefined(:regmat)
-	const regmat = FiniteVolume.hycoregularizationmatrix(neighbors, length(hycos), length(sources))
+	const regmat = FiniteVolume.hycoregularizationmatrix(neighbors, length(sources))
 else
 	println("skipping regmat")
 end
