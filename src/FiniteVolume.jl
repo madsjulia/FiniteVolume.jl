@@ -4,6 +4,7 @@ import IterativeSolvers
 import LinearAdjoints
 #import Preconditioners
 import PyAMG
+import NearestNeighbors
 
 function mydist(x1, x2)
 	return sqrt((x1[1] - x2[1]) ^ 2 + (x1[2] - x2[2]) ^ 2 + (x1[3] - x2[3]) ^ 2)
@@ -33,6 +34,22 @@ function getfreenodes(n, dirichletnodes)
 		end
 	end
 	return freenode, nodei2freenodei
+end
+
+function sourceregularizationmatrix(neighbors, areasoverlengths, dirichletnodes, numnodes)
+	I = Int[]
+	J = Int[]
+	V = Float64[]
+	freenode, nodei2freenodei = getfreenodes(numnodes, dirichletnodes)
+	for (i, (node1, node2)) in enumerate(neighbors)
+		if freenode[node1] && freenode[node2]
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], areasoverlengths[i])
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node2], -areasoverlengths[i])
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node2], areasoverlengths[i])
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node1], -areasoverlengths[i])
+		end
+	end
+	return sparse(I, J, V, numnodes, numnodes)
 end
 
 @LinearAdjoints.assemblesparsematrix (conductivities, sources, dirichletheads) u function assembleA(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector)
@@ -164,5 +181,14 @@ function hycoregularizationmatrix(neighbors, numnodes)
 	end
 	return sparse(I, J, V, length(neighbors), length(neighbors), +)
 end
+
+#=
+function knnregularization(coords, numneighbors, weightfun=h->1 / h)
+	I = Array(Int, size(coords, 2) * numneighbors)
+	J = Array(Int, size(coords, 2) * numneighbors)
+	V = Array(Float64, size(coords, 2) * numneighbors)
+	kdtree = 
+end
+=#
 
 end
