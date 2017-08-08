@@ -182,13 +182,39 @@ function hycoregularizationmatrix(neighbors, numnodes)
 	return sparse(I, J, V, length(neighbors), length(neighbors), +)
 end
 
-#=
 function knnregularization(coords, numneighbors, weightfun=h->1 / h)
-	I = Array(Int, size(coords, 2) * numneighbors)
-	J = Array(Int, size(coords, 2) * numneighbors)
-	V = Array(Float64, size(coords, 2) * numneighbors)
-	kdtree = 
+	I, J, V = innerknnregularization(coords, numneighbors, weightfun)
+	return sparse(I, J, V, size(coords, 2) * numneighbors, size(coords, 2))
 end
-=#
+
+function innerknnregularization(coords, numneighbors, weightfun=h->1 / h)
+	kdtree = NearestNeighbors.KDTree(coords)
+	idxs, dists = NearestNeighbors.knn(kdtree, coords, numneighbors + 1, true)
+	return assembleknnregularization(idxs, dists, weightfun)
+end
+
+function assembleknnregularization(idxs, dists, weightfun)
+	numneighbors = length(idxs[1]) - 1
+	I = Array(Int, 2 * length(idxs) * numneighbors)
+	J = Array(Int, 2 * length(idxs) * numneighbors)
+	V = Array(Float64, 2 * length(idxs) * numneighbors)
+	k = 1
+	eqnum = 1
+	for i = 1:length(idxs)
+		for j = 2:numneighbors + 1#start at 2 to exclude the point itself from the "neighbors"
+			v = weightfun(dists[i][j])
+			I[k] = eqnum
+			J[k] = i
+			V[k] = v
+			k += 1
+			I[k] = eqnum
+			J[k] = idxs[i][j]
+			V[k] = -v
+			k += 1
+			eqnum += 1
+		end
+	end
+	return I, J, V
+end
 
 end
