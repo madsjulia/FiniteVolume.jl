@@ -6,6 +6,8 @@ import LinearAdjoints
 import PyAMG
 import NearestNeighbors
 
+include("grid.jl")
+
 function mydist(x1, x2)
 	return sqrt((x1[1] - x2[1]) ^ 2 + (x1[2] - x2[2]) ^ 2 + (x1[3] - x2[3]) ^ 2)
 end
@@ -195,9 +197,9 @@ end
 
 function assembleknnregularization(idxs, dists, weightfun)
 	numneighbors = length(idxs[1]) - 1
-	I = Array(Int, 2 * length(idxs) * numneighbors)
-	J = Array(Int, 2 * length(idxs) * numneighbors)
-	V = Array(Float64, 2 * length(idxs) * numneighbors)
+	I = Array{Int}(2 * length(idxs) * numneighbors)
+	J = Array{Int}(2 * length(idxs) * numneighbors)
+	V = Array{Float64}(2 * length(idxs) * numneighbors)
 	k = 1
 	eqnum = 1
 	for i = 1:length(idxs)
