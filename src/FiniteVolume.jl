@@ -115,9 +115,9 @@ function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::V
 	A = assembleA(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads)
 	b = assembleb(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads)
 	M = PyAMG.aspreconditioner(PyAMG.RugeStubenSolver(A))
-	result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=400, restart=400)
-	#=
 	result, ch = IterativeSolvers.cg(A, b; Pl=M, log=true, maxiter=400)
+	#=
+	result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=400, restart=400)
 	@time result2 = PyAMG.solve(PyAMG.RugeStubenSolver(A), b, accel="cg", tol=sqrt(eps(Float64)))
 	@time result3 = PyAMG.solve(PyAMG.RugeStubenSolver(A, accel="cg"), b, tol=sqrt(eps(Float64)))
 	@time result4 = PyAMG.solve(PyAMG.SmoothedAggregationSolver(A, accel="cg"), b, tol=sqrt(eps(Float64)))
