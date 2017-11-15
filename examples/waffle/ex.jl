@@ -138,7 +138,7 @@ end
 @show gradient[is]
 =#
 
-function gradient!(x, storage)
+function gradient!(storage, x)
 	global hycos
 	global sources
 	global dirichletheads
