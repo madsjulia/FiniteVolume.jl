@@ -19,7 +19,7 @@ function defaultlinearsolver(A, b)
 	return result
 end
 
-#this modifies rhs and (maybe) A
+#this modifies rhs
 function backwardeuleronestep!(rhs, A, b, u_k, dt, linearsolver, rtol, mindt)
 	@. rhs = b + u_k / dt
 	diagonalupdate!(A, 1 / dt)
