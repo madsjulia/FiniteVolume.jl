@@ -7,6 +7,7 @@ import PyAMG
 import NearestNeighbors
 
 include("grid.jl")
+include("transient.jl")
 
 function mydist(x1, x2)
 	return sqrt((x1[1] - x2[1]) ^ 2 + (x1[2] - x2[2]) ^ 2 + (x1[3] - x2[3]) ^ 2)
@@ -54,27 +55,68 @@ function sourceregularizationmatrix(neighbors, areasoverlengths, dirichletnodes,
 	return sparse(I, J, V, numnodes, numnodes)
 end
 
-@LinearAdjoints.assemblesparsematrix (conductivities, sources, dirichletheads) u function assembleA(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector)
+function assemblelowrankAs(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i)
+	LIs = Array{Array{Int, 1}}(length(conductivities))
+	LJs = Array{Array{Int, 1}}(length(conductivities))
+	LVs = Array{Array{Float64, 1}}(length(conductivities))
+	RIs = Array{Array{Int, 1}}(length(conductivities))
+	RJs = Array{Array{Int, 1}}(length(conductivities))
+	RVs = Array{Array{Float64, 1}}(length(conductivities))
+	rankcount = zeros(Int, length(conductivities))
+	for i = 1:length(conductivities)
+		LIs[i] = Int[]
+		LJs[i] = Int[]
+		LVs[i] = Float64[]
+		RIs[i] = Int[]
+		RJs[i] = Int[]
+		RVs[i] = Float64[]
+	end
+	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
+	for (i, (node1, node2)) in enumerate(neighbors)
+		if freenode[node1] && freenode[node2]
+			rankcount[metaindex(i)] += 1
+			LinearAdjoints.addentry(LIs[metaindex(i)], LJs[metaindex(i)], LVs[metaindex(i)], nodei2freenodei[node1], rankcount[metaindex(i)], conductivities[metaindex(i)] * areasoverlengths[i])
+			LinearAdjoints.addentry(LIs[metaindex(i)], LJs[metaindex(i)], LVs[metaindex(i)], nodei2freenodei[node2], rankcount[metaindex(i)], -conductivities[metaindex(i)] * areasoverlengths[i])
+			LinearAdjoints.addentry(RIs[metaindex(i)], RJs[metaindex(i)], RVs[metaindex(i)], rankcount[metaindex(i)], nodei2freenodei[node1], 1.0)
+			LinearAdjoints.addentry(RIs[metaindex(i)], RJs[metaindex(i)], RVs[metaindex(i)], rankcount[metaindex(i)], nodei2freenodei[node2], -1.0)
+		elseif freenode[node1]
+			#@assert metaindex[i] == length(conductivities)
+			rankcount[metaindex(i)] += 1
+			LinearAdjoints.addentry(LIs[metaindex(i)], LJs[metaindex(i)], LVs[metaindex(i)], nodei2freenodei[node1], rankcount[metaindex(i)], conductivities[metaindex(i)] * areasoverlengths[i])
+			LinearAdjoints.addentry(RIs[metaindex(i)], RJs[metaindex(i)], RVs[metaindex(i)], rankcount[metaindex(i)], nodei2freenodei[node1], 1.0)
+		elseif freenode[node2]
+			#@assert metaindex[i] == length(conductivities)
+			rankcount[metaindex(i)] += 1
+			LinearAdjoints.addentry(LIs[metaindex(i)], LJs[metaindex(i)], LVs[metaindex(i)], nodei2freenodei[node2], rankcount[metaindex(i)], conductivities[metaindex(i)] * areasoverlengths[i])
+			LinearAdjoints.addentry(RIs[metaindex(i)], RJs[metaindex(i)], RVs[metaindex(i)], rankcount[metaindex(i)], nodei2freenodei[node2], 1.0)
+		end
+	end
+	Ls = map(i->sparse(LIs[i], LJs[i], LVs[i], sum(freenode), rankcount[i], +), 1:length(conductivities))
+	Rs = map(i->sparse(RIs[i], RJs[i], RVs[i], rankcount[i], sum(freenode), +), 1:length(conductivities))
+	return Ls, Rs
+end
+
+@LinearAdjoints.assemblesparsematrix (conductivities, sources, dirichletheads) u function assembleA(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i)
 	I = Int[]
 	J = Int[]
 	V = Float64[]
 	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
 	for (i, (node1, node2)) in enumerate(neighbors)
 		if freenode[node1] && freenode[node2]
-			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], conductivities[i] * areasoverlengths[i])
-			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node2], -conductivities[i] * areasoverlengths[i])
-			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node2], conductivities[i] * areasoverlengths[i])
-			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node1], -conductivities[i] * areasoverlengths[i])
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], conductivities[metaindex(i)] * areasoverlengths[i])
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node2], -conductivities[metaindex(i)] * areasoverlengths[i])
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node2], conductivities[metaindex(i)] * areasoverlengths[i])
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node1], -conductivities[metaindex(i)] * areasoverlengths[i])
 		elseif freenode[node1]
-			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], conductivities[i] * areasoverlengths[i])
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], conductivities[metaindex(i)] * areasoverlengths[i])
 		elseif freenode[node2]
-			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node2], conductivities[i] * areasoverlengths[i])
+			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node2], conductivities[metaindex(i)] * areasoverlengths[i])
 		end
 	end
 	return sparse(I, J, V, sum(freenode), sum(freenode), +)
 end
 
-@LinearAdjoints.assemblevector (conductivities, sources, dirichletheads) b function assembleb(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector)
+@LinearAdjoints.assemblevector (conductivities, sources, dirichletheads) b function assembleb(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i)
 	nodei2dirichleti = getnodei2dirichleti(sources, dirichletnodes)
 	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
 	b = Array{Float64}(sum(freenode))
@@ -87,9 +129,9 @@ end
 	end
 	for (i, (node1, node2)) in enumerate(neighbors)
 		if freenode[node1] && !freenode[node2]
-			b[nodei2freenodei[node1]] += conductivities[i] * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]]
+			b[nodei2freenodei[node1]] += conductivities[metaindex(i)] * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]]
 		elseif !freenode[node1] && freenode[node2]
-			b[nodei2freenodei[node2]] += conductivities[i] * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]]
+			b[nodei2freenodei[node2]] += conductivities[metaindex(i)] * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]]
 		end
 	end
 	return b

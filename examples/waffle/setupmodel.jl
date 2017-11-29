@@ -3,6 +3,7 @@ import FiniteVolume
 
 westzonenum, westnodes = FEHM.parsezone(joinpath(dirname(@__FILE__), "data/out_west.zonn"))
 eastzonenum, eastnodes = FEHM.parsezone(joinpath(dirname(@__FILE__), "data/out_east.zonn"))
+topzonenum, topnodes = FEHM.parsezone(joinpath(dirname(@__FILE__), "data/out_top.zonn"))
 wellzonenums, wellzonenodes = FEHM.parsezone(joinpath(dirname(@__FILE__), "data/well_screens.zonn"))
 isanode, zoneornodenums, skds, eflows, aipeds = FEHM.parseflow(joinpath(dirname(@__FILE__), "data/wl.flow"))
 hycoisanode, hycozoneornodenums, kxs, kys, kzs = FEHM.parsehyco(joinpath(dirname(@__FILE__), "data/w01.hyco"))
@@ -38,4 +39,4 @@ areasoverlengths = areasoverlengths[goodindices]
 neighbors = neighbors[goodindices]
 hycos = FiniteVolume.fehmhyco2fvhyco(xs, ys, zs, kxs, kys, kzs, neighbors)
 
-JLD.save("waffledata.jld", "neighbors", neighbors, "areasoverlengths", areasoverlengths, "hycos", hycos, "sources", sources, "dirichletnodes", dirichletnodes, "dirichletheads", dirichletheads)
+JLD.save("waffledata.jld", "neighbors", neighbors, "areasoverlengths", areasoverlengths, "hycos", hycos, "sources", sources, "dirichletnodes", dirichletnodes, "dirichletheads", dirichletheads, "xs", xs, "ys", ys, "zs", zs, "topnodes", topnodes)
