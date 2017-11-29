@@ -40,7 +40,6 @@ function backwardeulertwostep!(rhs, A, b, u_k, dt, linearsolver, rtol, mindt, on
 	twostep1 = backwardeuleronestep!(rhs, A, b, u_k, 0.5 * dt, linearsolver, rtol, mindt)
 	twostep = backwardeuleronestep!(rhs, A, b, twostep1, 0.5 * dt, linearsolver, rtol, mindt)
 	err = norm(onestep - twostep) / norm(onestep)
-	@show dt, err
 	if err < rtol
 		return twostep, dt
 	else
@@ -77,12 +76,9 @@ function backwardeulerintegrate(u0::T, A, b, dt0, t0::R, tfinal; linearsolver=de
 	A = copy(A)
 	dt = min(dt0, tfinal - t0)
 	while ts[end] < tfinal
-		#@time solution = backwardeulerstep!(rhs, A, b, us[end], dt0, linearsolver, rtol)
-		#@time solution, dt = backwardeulertwostep!(rhs, A, b, us[end], dt0, linearsolver, rtol, mindt)
-		@time solution, laststeptime = adaptivebackwardeulerstep!(rhs, A, b, us[end], dt, linearsolver, rtol, mindt)
+		solution, laststeptime = adaptivebackwardeulerstep!(rhs, A, b, us[end], dt, linearsolver, rtol, mindt)
 		push!(us, solution)
 		push!(ts, ts[end] + dt)
-		@show ts[end]
 		newdt = min(tfinal - ts[end], 2 * laststeptime)
 		dt = newdt
 	end
