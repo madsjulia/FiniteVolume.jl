@@ -21,6 +21,11 @@ end
 
 #this modifies rhs
 function backwardeuleronestep!(rhs, A, b, u_k, dt, linearsolver, rtol, mindt)
+	#u_{k+1} - u_k = dt * (b - A * u_{k+1})
+	#(I / dt + A) u_{k+1} = u_k / dt + b
+	if dt < mindt
+		error("time step too small $dt < $mindt")
+	end
 	@. rhs = b + u_k / dt
 	diagonalupdate!(A, 1 / dt)
 	onestep = linearsolver(A, rhs)
@@ -28,15 +33,7 @@ function backwardeuleronestep!(rhs, A, b, u_k, dt, linearsolver, rtol, mindt)
 	return onestep
 end
 
-function backwardeulertwostep!(rhs, A, b, u_k, dt, linearsolver, rtol, mindt, onestep=Float64[])
-	#u_{k+1} - u_k = dt * (b - A * u_{k+1})
-	#(I / dt + A) u_{k+1} = u_k / dt + b
-	if dt < mindt
-		error("time step too small $dt < $mindt")
-	end
-	if length(onestep) == 0
-		onestep = backwardeuleronestep!(rhs, A, b, u_k, dt, linearsolver, rtol, mindt)
-	end
+function backwardeulertwostep!(rhs, A, b, u_k, dt, linearsolver, rtol, mindt, onestep=backwardeuleronestep!(rhs, A, b, u_k, dt, linearsolver, rtol, mindt))
 	twostep1 = backwardeuleronestep!(rhs, A, b, u_k, 0.5 * dt, linearsolver, rtol, mindt)
 	twostep = backwardeuleronestep!(rhs, A, b, twostep1, 0.5 * dt, linearsolver, rtol, mindt)
 	err = norm(onestep - twostep) / norm(onestep)
@@ -67,6 +64,22 @@ function adaptivebackwardeulerstep!(rhs, A, b, u_k, dt, linearsolver, rtol, mind
 		end
 	end
 	return u_new, laststeptime
+end
+
+function backwardeulerintegrate(u0::T, A, b, dt0, t0::R, tfinal; linearsolver=defaultlinearsolver, rtol=1e-4, mindt=sqrt(eps(Float64))) where {T,R}
+	us = T[u0]
+	ts = R[t0]
+	rhs = similar(u0)
+	A = copy(A)
+	dt = min(dt0, tfinal - t0)
+	while ts[end] < tfinal
+		solution, laststeptime = adaptivebackwardeulerstep!(rhs, A, b, us[end], dt, linearsolver, rtol, mindt)
+		push!(us, solution)
+		push!(ts, ts[end] + dt)
+		newdt = min(tfinal - ts[end], 2 * laststeptime)
+		dt = newdt
+	end
+	return us, ts
 end
 
 function backwardeulerintegrate(u0::T, A, b, dt0, t0::R, tfinal; linearsolver=defaultlinearsolver, rtol=1e-4, mindt=sqrt(eps(Float64))) where {T,R}
