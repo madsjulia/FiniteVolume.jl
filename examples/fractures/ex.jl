@@ -1,7 +1,6 @@
 import FiniteVolume
 import JLD
 import PyAMG
-import RecycledCG
 
 meshdirs = ["fourfractures", "circuit", "backbone_x01", "homogenous-10m", "pl_alpha_1.6", "25L_network_x2"]
 #meshdirs = ["circuit"]
