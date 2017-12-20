@@ -52,10 +52,9 @@ function setupmesh(meshdir, isdirichletnode, dirichlethead)
 	goodmesh2greatmesh(meshdir, isdirichletnode, dirichlethead)
 end
 
-@time setupmesh("fourfractures", (x, y, z)->abs(x) == 0.5, (x, y, z)->ifelse(x > 0, 1e6, 2e6))
-@time setupmesh("circuit", (x, y, z)->abs(x) == 1.0, (x, y, z)->ifelse(x > 0, 1e6, 2e6))
-@time setupmesh("25L_network_x2", (x, y, z)->abs(x) > 4.99999, (x, y, z)->ifelse(x > 0, 1e6, 2e6))
-@time setupmesh("homogenous-10m", (x, y, z)->abs(x) > 4.99999, (x, y, z)->ifelse(x > 0, 1e6, 2e6))
-@time setupmesh("backbone_x01", (x, y, z)->abs(x) > 499.999, (x, y, z)->ifelse(x > 0, 1e6, 2e6))
-@time setupmesh("pl_alpha_1.6", (x, y, z)->abs(x) > 499.999, (x, y, z)->ifelse(x > 0, 1e6, 2e6))
-
+#@time setupmesh("fourfractures", (x, y, z)->abs(x) == 0.5, (x, y, z)->ifelse(x > 0, 1e6, 2e6))
+#@time setupmesh("circuit", (x, y, z)->abs(x) == 1.0, (x, y, z)->ifelse(x > 0, 1e6, 2e6))
+#@time setupmesh("25L_network_x2", (x, y, z)->abs(x) > 4.99999, (x, y, z)->ifelse(x > 0, 1e6, 2e6))
+#@time setupmesh("homogenous-10m", (x, y, z)->abs(x) > 4.99999, (x, y, z)->ifelse(x > 0, 1e6, 2e6))
+@time setupmesh("backbone_x01", (x, y, z)->abs(x) > 7.49999, (x, y, z)->ifelse(x > 0, 1e6, 2e6))
+#@time setupmesh("pl_alpha_1.6", (x, y, z)->abs(x) > 499.999, (x, y, z)->ifelse(x > 0, 1e6, 2e6))
