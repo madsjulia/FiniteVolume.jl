@@ -153,11 +153,11 @@ function freenodes2nodes(result, sources, dirichletnodes, dirichletheads)
 	return head, freenode, nodei2freenodei
 end
 
-function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector)
+function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector; maxiter=400)
 	A = assembleA(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads)
 	b = assembleb(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads)
 	M = PyAMG.aspreconditioner(PyAMG.RugeStubenSolver(A))
-	result, ch = IterativeSolvers.cg(A, b; Pl=M, log=true, maxiter=400)
+	result, ch = IterativeSolvers.cg(A, b; Pl=M, log=true, maxiter=maxiter)
 	#=
 	result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=400, restart=400)
 	@time result2 = PyAMG.solve(PyAMG.RugeStubenSolver(A), b, accel="cg", tol=sqrt(eps(Float64)))
