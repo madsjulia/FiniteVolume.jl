@@ -14,3 +14,6 @@ dirichletvalues = [1.0,  0.0]
 
 h, ch, A, B, freenode = FiniteVolume.solvediffusion(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletvalues)
 @test h ≈ [1.0, 2/3, 1/3, 0.0]
+
+include("ode.jl")
+include("theis.jl")
