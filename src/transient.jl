@@ -47,10 +47,17 @@ function defaultlinearsolver(A, b, x0)
 	return result
 end
 
+function backwardeuleronestep!(rhs, A, getb::Function, u_k, t, dt, linearsolver, atol, mindt)
+	return backwardeuleronestep!(rhs, A, getb(t), u_k, dt, linearsolver, atol, mindt)
+end
+
 #this modifies rhs
-function backwardeuleronestep!(rhs, A, b, u_k, dt, linearsolver, atol, mindt)
+function backwardeuleronestep!(rhs, A, b::Vector, u_k, dt, linearsolver, atol, mindt)
 	#u_{k+1} - u_k = dt * (b - A * u_{k+1})
 	#(I / dt + A) u_{k+1} = u_k / dt + b
+	if dt <= 0
+		error("time step must be positive")
+	end
 	@. rhs = b + u_k / dt
 	diagonalupdate!(A, 1 / dt)
 	onestep = linearsolver(A, rhs, u_k)
@@ -58,9 +65,9 @@ function backwardeuleronestep!(rhs, A, b, u_k, dt, linearsolver, atol, mindt)
 	return onestep
 end
 
-function backwardeulertwostep!(rhs, A, b, u_k, dt, linearsolver, atol, mindt, onestep=backwardeuleronestep!(rhs, A, b, u_k, dt, linearsolver, atol, mindt))
-	twostep1 = backwardeuleronestep!(rhs, A, b, u_k, 0.5 * dt, linearsolver, atol, mindt)
-	twostep = backwardeuleronestep!(rhs, A, b, twostep1, 0.5 * dt, linearsolver, atol, mindt)
+function backwardeulertwostep!(rhs, A, getb::Function, u_k, t, dt, linearsolver, atol, mindt, onestep=backwardeuleronestep!(rhs, A, getb, u_k, t, dt, linearsolver, atol, mindt))
+	twostep1 = backwardeuleronestep!(rhs, A, getb, u_k, t, 0.5 * dt, linearsolver, atol, mindt)
+	twostep = backwardeuleronestep!(rhs, A, getb, twostep1, t + 0.5 * dt, 0.5 * dt, linearsolver, atol, mindt)
 	err = norm(onestep - twostep)
 	if err < atol
 		return twostep, dt, err < atol / 4
@@ -69,8 +76,8 @@ function backwardeulertwostep!(rhs, A, b, u_k, dt, linearsolver, atol, mindt, on
 	end
 end
 
-function adaptivebackwardeulerstep!(rhs, A, b, u_k, dt, linearsolver, atol, mindt)
-	u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, b, u_k, dt, linearsolver, atol, mindt)
+function adaptivebackwardeulerstep!(rhs, A, getb::Function, u_k, t, dt, linearsolver, atol, mindt)
+	u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, getb, u_k, t, dt, linearsolver, atol, mindt)
 	if laststeptime < dt#it couldn't take the step we asked, so try taking smaller steps
 		laststepfailed = true
 		elapsedtime = 0.0
@@ -78,9 +85,9 @@ function adaptivebackwardeulerstep!(rhs, A, b, u_k, dt, linearsolver, atol, mind
 		targetdt = laststeptime
 		while elapsedtime < dt
 			if laststepfailed#if the last step failed, reuse u_new as the onestep part
-				u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, b, u_elapsedtime, targetdt, linearsolver, atol, mindt, u_new)
+				u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, getb, u_elapsedtime, t + elapsedtime, targetdt, linearsolver, atol, mindt, u_new)
 			else
-				u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, b, u_elapsedtime, targetdt, linearsolver, atol, mindt)
+				u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, getb, u_elapsedtime, t + elapsedtime, targetdt, linearsolver, atol, mindt)
 			end
 			if laststeptime == targetdt
 				elapsedtime += laststeptime
@@ -100,14 +107,21 @@ function adaptivebackwardeulerstep!(rhs, A, b, u_k, dt, linearsolver, atol, mind
 	return u_new, laststeptime, increasestepsize
 end
 
-function backwardeulerintegrate(u0::T, A, b, dt0, t0::R, tfinal; linearsolver=defaultlinearsolver, atol=1e-4, mindt=sqrt(eps(Float64))) where {T,R}
+function backwardeulerintegrate(u0::T, A, b::Vector, dt0, t0::R, tfinal; linearsolver=defaultlinearsolver, atol=1e-4, mindt=sqrt(eps(Float64))) where {T,R}
+	function getb(t)
+		return b
+	end
+	return backwardeulerintegrate(u0, A, getb, dt0, t0, tfinal; linearsolver=linearsolver, atol=atol, mindt=mindt)
+end
+
+function backwardeulerintegrate(u0::T, A, getb::Function, dt0, t0::R, tfinal; linearsolver=defaultlinearsolver, atol=1e-4, mindt=sqrt(eps(Float64))) where {T,R}
 	us = T[u0]
 	ts = R[t0]
 	rhs = similar(u0)
 	A = copy(A)
 	dt = min(dt0, tfinal - t0)
 	while ts[end] < tfinal
-		solution, laststeptime, increasestepsize = adaptivebackwardeulerstep!(rhs, A, b, us[end], dt, linearsolver, atol, mindt)
+		solution, laststeptime, increasestepsize = adaptivebackwardeulerstep!(rhs, A, getb, us[end], ts[end], dt, linearsolver, atol, mindt)
 		push!(us, solution)
 		push!(ts, ts[end] + dt)
 		if increasestepsize
