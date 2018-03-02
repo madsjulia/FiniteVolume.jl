@@ -15,7 +15,7 @@ x(t, p) = [p[1] * exp(p[2] * t)]
 lambda(t, p) = (1 - exp(p[2] * (T - t))) / b
 G(p) = p[1] / p[2] * (exp(p[2] * T) - 1)
 gradient(p) = [1 / p[2] * (exp(p[2] * T) - 1), -p[1] / p[2]^2 * (exp(p[2] * T) - 1) + p[1] / p[2] * exp(p[2] * T) * T]
-A(p) = fill(p[2], 1, 1)
+A = p->fill(p[2], 1, 1)
 getb(t, p) = zeros(1)
 function dx0dp(p)
 	result = Array{Float64}(2, 1)
