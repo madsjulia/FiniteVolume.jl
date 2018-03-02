@@ -1,10 +1,52 @@
 import Interpolations
 
+function nodehycos2neighborhycos(neighbors, nodehycos, logtransformhyco=false)
+	n1 = size(nodehycos, 1)
+	n2 = size(nodehycos, 2)
+	n3 = size(nodehycos, 3)
+	function multiindex(k)
+		i3 = mod(k, n3) + 1
+		i2 = div(mod(k, n2 * n3) - i3, n3) + 1
+		i1 = div(k - i3 - n3 * (i2 - 1), n2 * n3) + 1
+		return i1, i2, i3
+	end
+	neighborhycos = Array{Float64}(length(neighbors))
+	for i = 1:length(neighborhycos)
+		if logtransformhyco
+			neighborhycos[i] = 0.5 * (nodehycos[multiindex(neighbors[i][1])...] + nodehycos[multiindex(neighbors[i][2])...])
+		else
+			neighborhycos[i] = sqrt(nodehycos[multiindex(neighbors[i][1])...] * nodehycos[multiindex(neighbors[i][2])...])
+		end
+	end
+	return neighborhycos
+end
+
+function neighborhycos2nodehycos(neighbors, neighborhycos, ns)
+	function multiindex(k)
+		i3 = mod(k, ns[3]) + 1
+		i2 = div(mod(k, ns[2] * ns[3]) - i3, ns[3]) + 1
+		i1 = div(k - i3 - ns[3] * (i2 - 1), ns[2] * ns[3]) + 1
+		return i1, i2, i3
+	end
+	nodehycos = ones(Float64, ns...)
+	neighborcount = zeros(Int, ns...)
+	for i = 1:length(neighborhycos)
+		#neighborhycos[i] = sqrt(nodehycos[multiindex(neighbors[i][1])...] * nodehycos[multiindex(neighbors[i][2])...])
+		nodehycos[multiindex(neighbors[i][1])...] += neighborhycos[i]
+		neighborcount[multiindex(neighbors[i][1])...] += 1
+		nodehycos[multiindex(neighbors[i][2])...] += neighborhycos[i]
+		neighborcount[multiindex(neighbors[i][2])...] += 1
+	end
+	@. nodehycos /= neighborcount
+	return nodehycos
+end
+
+
 function regulargrid(mins, maxs, ns)
 	@assert length(mins) == length(maxs)
 	@assert length(mins) == length(ns)
 	length(mins) == 3 || error("only 3 dimensions supported")
-	is2k = (i1, i2, i3)->i3 + ns[3] * (i2 - 1) + ns[3] * ns[2] * (i1 - 1)
+	linearindex = (i1, i2, i3)->i3 + ns[3] * (i2 - 1) + ns[3] * ns[2] * (i1 - 1)
 	coords = Array{Float64}(3, prod(ns))
 	xs = linspace(mins[1], maxs[1], ns[1])
 	ys = linspace(mins[2], maxs[2], ns[2])
@@ -32,21 +74,21 @@ function regulargrid(mins, maxs, ns)
 					areadz *= 0.5
 				end
 				push!(volumes, areadx * aready * areadz)
-				coords[1, is2k(i1, i2, i3)] = xs[i1]
-				coords[2, is2k(i1, i2, i3)] = ys[i2]
-				coords[3, is2k(i1, i2, i3)] = zs[i3]
+				coords[1, linearindex(i1, i2, i3)] = xs[i1]
+				coords[2, linearindex(i1, i2, i3)] = ys[i2]
+				coords[3, linearindex(i1, i2, i3)] = zs[i3]
 				if i1 < ns[1]
-					neighbors[j] = is2k(i1, i2, i3)=>is2k(i1 + 1, i2, i3)
+					neighbors[j] = linearindex(i1, i2, i3)=>linearindex(i1 + 1, i2, i3)
 					areasoverlengths[j] = aready * areadz / dx
 					j += 1
 				end
 				if i2 < ns[2]
-					neighbors[j] = is2k(i1, i2, i3)=>is2k(i1, i2 + 1, i3)
+					neighbors[j] = linearindex(i1, i2, i3)=>linearindex(i1, i2 + 1, i3)
 					areasoverlengths[j] = areadx * areadz / dy
 					j += 1
 				end
 				if i3 < ns[3]
-					neighbors[j] = is2k(i1, i2, i3)=>is2k(i1, i2, i3 + 1)
+					neighbors[j] = linearindex(i1, i2, i3)=>linearindex(i1, i2, i3 + 1)
 					areasoverlengths[j] = areadx * aready / dz
 					j += 1
 				end

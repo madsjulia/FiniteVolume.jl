@@ -96,27 +96,42 @@ function assemblelowrankAs(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths
 	return Ls, Rs
 end
 
-@LinearAdjoints.assemblesparsematrix (conductivities, sources, dirichletheads) u function assembleA(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i)
+@LinearAdjoints.assemblesparsematrix (conductivities, sources, dirichletheads) u function assembleA(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity::Bool=false)
 	I = Int[]
 	J = Int[]
 	V = Float64[]
 	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
-	for (i, (node1, node2)) in enumerate(neighbors)
-		if freenode[node1] && freenode[node2]
-			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], conductivities[metaindex(i)] * areasoverlengths[i])
-			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node2], -conductivities[metaindex(i)] * areasoverlengths[i])
-			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node2], conductivities[metaindex(i)] * areasoverlengths[i])
-			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node1], -conductivities[metaindex(i)] * areasoverlengths[i])
-		elseif freenode[node1]
-			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], conductivities[metaindex(i)] * areasoverlengths[i])
-		elseif freenode[node2]
-			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node2], conductivities[metaindex(i)] * areasoverlengths[i])
+	if logtransformconductivity
+		for (i, (node1, node2)) in enumerate(neighbors)
+			if freenode[node1] && freenode[node2]
+				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], exp(conductivities[metaindex(i)]) * areasoverlengths[i])
+				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node2], -exp(conductivities[metaindex(i)]) * areasoverlengths[i])
+				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node2], exp(conductivities[metaindex(i)]) * areasoverlengths[i])
+				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node1], -exp(conductivities[metaindex(i)]) * areasoverlengths[i])
+			elseif freenode[node1]
+				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], exp(conductivities[metaindex(i)]) * areasoverlengths[i])
+			elseif freenode[node2]
+				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node2], exp(conductivities[metaindex(i)]) * areasoverlengths[i])
+			end
+		end
+	else
+		for (i, (node1, node2)) in enumerate(neighbors)
+			if freenode[node1] && freenode[node2]
+				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], conductivities[metaindex(i)] * areasoverlengths[i])
+				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node2], -conductivities[metaindex(i)] * areasoverlengths[i])
+				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node2], conductivities[metaindex(i)] * areasoverlengths[i])
+				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node1], -conductivities[metaindex(i)] * areasoverlengths[i])
+			elseif freenode[node1]
+				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node1], nodei2freenodei[node1], conductivities[metaindex(i)] * areasoverlengths[i])
+			elseif freenode[node2]
+				LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node2], conductivities[metaindex(i)] * areasoverlengths[i])
+			end
 		end
 	end
 	return sparse(I, J, V, sum(freenode), sum(freenode), +)
 end
 
-@LinearAdjoints.assemblevector (conductivities, sources, dirichletheads) b function assembleb(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i)
+@LinearAdjoints.assemblevector (conductivities, sources, dirichletheads) b function assembleb(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity::Bool=false)
 	nodei2dirichleti = getnodei2dirichleti(sources, dirichletnodes)
 	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
 	b = Array{Float64}(sum(freenode))
@@ -127,11 +142,21 @@ end
 			j += 1
 		end
 	end
-	for (i, (node1, node2)) in enumerate(neighbors)
-		if freenode[node1] && !freenode[node2]
-			b[nodei2freenodei[node1]] += conductivities[metaindex(i)] * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]]
-		elseif !freenode[node1] && freenode[node2]
-			b[nodei2freenodei[node2]] += conductivities[metaindex(i)] * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]]
+	if logtransformconductivity
+		for (i, (node1, node2)) in enumerate(neighbors)
+			if freenode[node1] && !freenode[node2]
+				b[nodei2freenodei[node1]] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]]
+			elseif !freenode[node1] && freenode[node2]
+				b[nodei2freenodei[node2]] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]]
+			end
+		end
+	else
+		for (i, (node1, node2)) in enumerate(neighbors)
+			if freenode[node1] && !freenode[node2]
+				b[nodei2freenodei[node1]] += conductivities[metaindex(i)] * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]]
+			elseif !freenode[node1] && freenode[node2]
+				b[nodei2freenodei[node2]] += conductivities[metaindex(i)] * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]]
+			end
 		end
 	end
 	return b

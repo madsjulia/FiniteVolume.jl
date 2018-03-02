@@ -16,4 +16,5 @@ h, ch, A, B, freenode = FiniteVolume.solvediffusion(neighbors, areasoverlengths,
 @test h ≈ [1.0, 2/3, 1/3, 0.0]
 
 include("ode.jl")
+include("odeadjoint.jl")
 include("theis.jl")

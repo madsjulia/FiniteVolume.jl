@@ -1,5 +1,7 @@
 using Base.Test
 import FiniteVolume
+import Interpolations
+import QuadGK
 
 #solve dy/dt=-A*y with y(0)=[1, 1, 1], A=diagm([1, 2, 3])
 #the analytical solution is y=[e^-t, e^(-2*t), e^(-3*t)]

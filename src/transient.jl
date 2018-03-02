@@ -1,4 +1,5 @@
-import DifferentialEquations
+import Interpolations
+import QuadGK
 
 function diagonalupdate!(A::Array{T, 2}, increment) where {T}
 	for i = 1:size(A, 1)
@@ -47,12 +48,12 @@ function defaultlinearsolver(A, b, x0)
 	return result
 end
 
-function backwardeuleronestep!(rhs, A, getb::Function, u_k, t, dt, linearsolver, atol, mindt)
-	return backwardeuleronestep!(rhs, A, getb(t), u_k, dt, linearsolver, atol, mindt)
+function backwardeuleronestep!(rhs, A, getb::Function, u_k, t, dt, linearsolver, atol)
+	return backwardeuleronestep!(rhs, A, getb(t), u_k, dt, linearsolver, atol)
 end
 
 #this modifies rhs
-function backwardeuleronestep!(rhs, A, b::Vector, u_k, dt, linearsolver, atol, mindt)
+function backwardeuleronestep!(rhs, A, b::Vector, u_k, dt, linearsolver, atol)
 	#u_{k+1} - u_k = dt * (b - A * u_{k+1})
 	#(I / dt + A) u_{k+1} = u_k / dt + b
 	if dt <= 0
@@ -65,9 +66,9 @@ function backwardeuleronestep!(rhs, A, b::Vector, u_k, dt, linearsolver, atol, m
 	return onestep
 end
 
-function backwardeulertwostep!(rhs, A, getb::Function, u_k, t, dt, linearsolver, atol, mindt, onestep=backwardeuleronestep!(rhs, A, getb, u_k, t, dt, linearsolver, atol, mindt))
-	twostep1 = backwardeuleronestep!(rhs, A, getb, u_k, t, 0.5 * dt, linearsolver, atol, mindt)
-	twostep = backwardeuleronestep!(rhs, A, getb, twostep1, t + 0.5 * dt, 0.5 * dt, linearsolver, atol, mindt)
+function backwardeulertwostep!(rhs, A, getb::Function, u_k, t, dt, linearsolver, atol, onestep=backwardeuleronestep!(rhs, A, getb, u_k, t, dt, linearsolver, atol))
+	twostep1 = backwardeuleronestep!(rhs, A, getb, u_k, t, 0.5 * dt, linearsolver, atol)
+	twostep = backwardeuleronestep!(rhs, A, getb, twostep1, t + 0.5 * dt, 0.5 * dt, linearsolver, atol)
 	err = norm(onestep - twostep)
 	if err < atol
 		return twostep, dt, err < atol / 4
@@ -76,8 +77,8 @@ function backwardeulertwostep!(rhs, A, getb::Function, u_k, t, dt, linearsolver,
 	end
 end
 
-function adaptivebackwardeulerstep!(rhs, A, getb::Function, u_k, t, dt, linearsolver, atol, mindt)
-	u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, getb, u_k, t, dt, linearsolver, atol, mindt)
+function adaptivebackwardeulerstep!(rhs, A, getb::Function, u_k, t, dt, linearsolver, atol)
+	u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, getb, u_k, t, dt, linearsolver, atol)
 	if laststeptime < dt#it couldn't take the step we asked, so try taking smaller steps
 		laststepfailed = true
 		elapsedtime = 0.0
@@ -85,9 +86,9 @@ function adaptivebackwardeulerstep!(rhs, A, getb::Function, u_k, t, dt, linearso
 		targetdt = laststeptime
 		while elapsedtime < dt
 			if laststepfailed#if the last step failed, reuse u_new as the onestep part
-				u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, getb, u_elapsedtime, t + elapsedtime, targetdt, linearsolver, atol, mindt, u_new)
+				u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, getb, u_elapsedtime, t + elapsedtime, targetdt, linearsolver, atol, u_new)
 			else
-				u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, getb, u_elapsedtime, t + elapsedtime, targetdt, linearsolver, atol, mindt)
+				u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, getb, u_elapsedtime, t + elapsedtime, targetdt, linearsolver, atol)
 			end
 			if laststeptime == targetdt
 				elapsedtime += laststeptime
@@ -102,26 +103,27 @@ function adaptivebackwardeulerstep!(rhs, A, getb::Function, u_k, t, dt, linearso
 			else
 				error("Code is broken -- laststeptime should never be greater than targetdt")
 			end
+			targetdt = min(targetdt, dt - elapsedtime)#don't overshoot
 		end
 	end
 	return u_new, laststeptime, increasestepsize
 end
 
-function backwardeulerintegrate(u0::T, A, b::Vector, dt0, t0::R, tfinal; linearsolver=defaultlinearsolver, atol=1e-4, mindt=sqrt(eps(Float64))) where {T,R}
+function backwardeulerintegrate(u0::T, A, b::Vector, dt0, t0::R, tfinal; linearsolver=defaultlinearsolver, atol=1e-4) where {T,R}
 	function getb(t)
 		return b
 	end
-	return backwardeulerintegrate(u0, A, getb, dt0, t0, tfinal; linearsolver=linearsolver, atol=atol, mindt=mindt)
+	return backwardeulerintegrate(u0, A, getb, dt0, t0, tfinal; linearsolver=linearsolver, atol=atol)
 end
 
-function backwardeulerintegrate(u0::T, A, getb::Function, dt0, t0::R, tfinal; linearsolver=defaultlinearsolver, atol=1e-4, mindt=sqrt(eps(Float64))) where {T,R}
+function backwardeulerintegrate(u0::T, A, getb::Function, dt0, t0::R, tfinal; linearsolver=defaultlinearsolver, atol=1e-4) where {T,R}
 	us = T[u0]
 	ts = R[t0]
 	rhs = similar(u0)
 	A = copy(A)
 	dt = min(dt0, tfinal - t0)
 	while ts[end] < tfinal
-		solution, laststeptime, increasestepsize = adaptivebackwardeulerstep!(rhs, A, getb, us[end], ts[end], dt, linearsolver, atol, mindt)
+		solution, laststeptime, increasestepsize = adaptivebackwardeulerstep!(rhs, A, getb, us[end], ts[end], dt, linearsolver, atol)
 		push!(us, solution)
 		push!(ts, ts[end] + dt)
 		if increasestepsize
@@ -134,9 +136,9 @@ function backwardeulerintegrate(u0::T, A, getb::Function, dt0, t0::R, tfinal; li
 	return us, ts
 end
 
-function backwardeulerintegrate(u0, tspan, Ss::Number, volumes::Vector, neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i; dt0=1.0, kwargs...)
-	A = assembleA(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads, metaindex)
-	b = assembleb(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads, metaindex)
+function backwardeulerintegrate(u0, tspan, Ss::Number, volumes::Vector, neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity=false; dt0=1.0, kwargs...)
+	A = assembleA(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads, metaindex, logtransformconductivity)
+	b = assembleb(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads, metaindex, logtransformconductivity)
 	freenodes, nodei2freenodei = getfreenodes(length(u0), dirichletnodes)
 	freenodei2nodei = Dict(zip(values(nodei2freenodei), keys(nodei2freenodei)))
 	scalebyvolume!(A, Ss * volumes, freenodei2nodei)
@@ -145,4 +147,35 @@ function backwardeulerintegrate(u0, tspan, Ss::Number, volumes::Vector, neighbor
 	us, ts = backwardeulerintegrate(u0, A, b, dt0, tspan[1], tspan[2]; kwargs...)
 	us = map(x->freenodes2nodes(x, sources, dirichletnodes, dirichletheads)[1], us)
 	return us, ts
+end
+
+function getcontinuoussolution(us, ts)
+	itp = Interpolations.interpolate((ts,), us, Interpolations.Gridded(Interpolations.Linear()))
+	uc(t) = itp[t]
+	return uc
+end
+
+#we use the notation from Strang's "Computational Science and Engineering"
+#the adjoint equation is dλ/dt=-[df/dt]ᵀ*λ-[dg/du]ᵀ with λ(T)=0
+#we reformulate in terms of γ(t) = gamma(t) = λ(T-t)
+#dγ/dt(t)=[df/dt(T-t)]ᵀ+[dg/du(T-t)]ᵀ
+#the goal is to facilitate the computation of the gradient of ∫g(u,t,p)dt by solving the adjoint equation
+function adjointintegrate(getdgdu::Function, tspan, Ss::Number, volumes::Vector, neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity=false; kwargs...)
+	A = assembleA(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads, metaindex, logtransformconductivity)
+	freenodes, nodei2freenodei = getfreenodes(length(volumes), dirichletnodes)
+	freenodei2nodei = Dict(zip(values(nodei2freenodei), keys(nodei2freenodei)))
+	scalebyvolume!(A, Ss * volumes, freenodei2nodei)
+	return adjointintegrate(transpose(A), getdgdu, tspan; kwargs...)
+end
+
+function adjointintegrate(A, getdgdu, tspan; dt0=1.0, kwargs...)
+	gamma0 = zeros(size(A, 2))
+	gammas, tsgamma = backwardeulerintegrate(gamma0, A, getdgdu, dt0, tspan[1], tspan[2]; kwargs...)
+	return reverse(gammas), reverse(tspan[2] - tsgamma)#return in terms of λ instead of γ
+end
+
+function gradientintegrate(lambdac, du0dp, dgdp, dfdp, tspan; kwargs...)
+	I, E = QuadGK.quadgk(t->dgdp(t) + dfdp(t) * lambdac(t), tspan...; kwargs...)
+	dGdp = du0dp * lambdac(0) + I
+	return dGdp, E
 end
