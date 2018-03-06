@@ -1,7 +1,7 @@
 function getadjointfunctions(sigma, obsfreenodes, uobs, u0, tspan, Ss::Number, volumes::Vector, neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity=false; kwargs...)
 	freenodes, nodei2freenodei = FiniteVolume.getfreenodes(length(u0), dirichletnodes)
 	freenodei2nodei = Dict(zip(values(nodei2freenodei), keys(nodei2freenodei)))
-	function g(u, t, uobs)
+	function g(u, t)
 		uobseval = uobs(t)
 		ueval = u(t)
 		retval = 0.0
@@ -10,7 +10,7 @@ function getadjointfunctions(sigma, obsfreenodes, uobs, u0, tspan, Ss::Number, v
 		end
 		return retval
 	end
-	function dgdu(u, t, uobs)
+	function dgdu(u, t)
 		uobseval = uobs(t)
 		ueval = u(t)
 		result = zeros(sum(freenodes))
@@ -41,7 +41,7 @@ function getadjointfunctions(sigma, obsfreenodes, uobs, u0, tspan, Ss::Number, v
 		p_dirichletheads = p[length(conductivities) + length(sources) + 1:length(conductivities) + length(sources) + length(dirichletheads)]
 		us_p, ts_p = FiniteVolume.backwardeulerintegrate(u0, tspan, Ss, volumes, neighbors, areasoverlengths, p_conductivities, p_sources, dirichletnodes, p_dirichletheads, metaindex, logtransformconductivity; kwargs...)
 		uc_p = FiniteVolume.getcontinuoussolution(us_p, ts_p)
-		I, E = QuadGK.quadgk(t->g(uc_p, t, uobs), tspan...; maxevals=3 * 10^2, order=21)
+		I, E = QuadGK.quadgk(t->g(uc_p, t), tspan...; maxevals=3 * 10^2, order=21)
 		return I
 	end
 	return g, dgdu, dfdp, dgdp, du0dp, G

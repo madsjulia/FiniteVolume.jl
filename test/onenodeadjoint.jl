@@ -49,11 +49,11 @@ obsfreenodes = map(i->nodei2freenodei[i], obsnodes)
 
 g, dgdu, dfdp, dgdp, du0dp, G = FiniteVolume.getadjointfunctions(sigma, obsfreenodes, uobs, u0, tspan, Ss, volumes, neighbors, areasoverlengths, loghycos, sources, dirichletnodes, dirichletheads, i->i, true; atol=atol, dt0=dt0)
 
-@test g(uobs, 0.5 * t1, uobs) == 0
-@test dgdu(t->uobs(t) + 1, 0.5 * t1, uobs) == [i in obsfreenodes ? 2 * sigma(i, 0.5 * t1)^2 : 0.0 for i = 1:sum(freenodes)]
+@test g(uobs, 0.5 * t1) == 0
+@test dgdu(t->uobs(t) + 1, 0.5 * t1) == [i in obsfreenodes ? 2 * sigma(i, 0.5 * t1)^2 : 0.0 for i = 1:sum(freenodes)]
 
 f_analytical = s->2 * sigma(1, s)^2 * (u_init_analytical(s) - uobs_analytical(s))
-lambdas, ts_lambda = FiniteVolume.adjointintegrate(t->dgdu(uc_init, t, uobs), tspan, Ss, volumes, neighbors, areasoverlengths, p0_hycos, p0_sources, dirichletnodes, p0_dirichletheads, i->i, true; atol=atol, dt0=dt0)
+lambdas, ts_lambda = FiniteVolume.adjointintegrate(t->dgdu(uc_init, t), tspan, Ss, volumes, neighbors, areasoverlengths, p0_hycos, p0_sources, dirichletnodes, p0_dirichletheads, i->i, true; atol=atol, dt0=dt0)
 lambdac = FiniteVolume.getcontinuoussolution(lambdas, ts_lambda)
 gamma_analytical = t->exp(-e * t) * QuadGK.quadgk(s->exp(e * s) * f_analytical(tspan[2] - s), 0, t)[1]
 lambda_analytical = t->gamma_analytical(tspan[2] - t)
