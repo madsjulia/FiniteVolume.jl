@@ -1,5 +1,3 @@
-import Interpolations
-
 function nodehycos2neighborhycos(neighbors, nodehycos, logtransformhyco=false)
 	n1 = size(nodehycos, 1)
 	n2 = size(nodehycos, 2)

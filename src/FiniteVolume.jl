@@ -1,13 +1,16 @@
 module FiniteVolume
 
+import Interpolations
 import IterativeSolvers
 import LinearAdjoints
+import NearestNeighbors
 #import Preconditioners
 import PyAMG
-import NearestNeighbors
+import QuadGK
 
 include("grid.jl")
 include("transient.jl")
+include("transientadjointutils.jl")
 
 function mydist(x1, x2)
 	return sqrt((x1[1] - x2[1]) ^ 2 + (x1[2] - x2[2]) ^ 2 + (x1[3] - x2[3]) ^ 2)

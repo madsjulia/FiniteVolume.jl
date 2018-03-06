@@ -13,7 +13,7 @@ p = [a, b]
 T = 1.0
 x(t, p) = [p[1] * exp(p[2] * t)]
 lambda(t, p) = (1 - exp(p[2] * (T - t))) / b
-G(p) = p[1] / p[2] * (exp(p[2] * T) - 1)
+G = p->p[1] / p[2] * (exp(p[2] * T) - 1)
 gradient(p) = [1 / p[2] * (exp(p[2] * T) - 1), -p[1] / p[2]^2 * (exp(p[2] * T) - 1) + p[1] / p[2] * exp(p[2] * T) * T]
 A = p->fill(p[2], 1, 1)
 getb(t, p) = zeros(1)
@@ -23,7 +23,7 @@ function dx0dp(p)
 	result[2, 1] = 0
 	return result
 end
-function dfdp(xc, t)
+dfdp = (xc, t)->begin
 	result = zeros(2, 1)
 	result[2, 1] = -xc(t)[1]
 	return result

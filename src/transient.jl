@@ -1,6 +1,3 @@
-import Interpolations
-import QuadGK
-
 function diagonalupdate!(A::Array{T, 2}, increment) where {T}
 	for i = 1:size(A, 1)
 		A[i, i] += increment

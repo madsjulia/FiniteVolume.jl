@@ -47,55 +47,13 @@ freenodei2nodei = Dict(zip(values(nodei2freenodei), keys(nodei2freenodei)))
 obsnodes = [2]
 obsfreenodes = map(i->nodei2freenodei[i], obsnodes)
 
-function g(u, t, p, uobs)
-	uobseval = uobs(t)
-	ueval = u(t)
-	retval = 0.0
-	for i in obsfreenodes
-		retval += sigma(i, t)^2 * (ueval[freenodei2nodei[i]] - uobseval[freenodei2nodei[i]])^2
-	end
-	return retval
-end
+g, dgdu, dfdp, dgdp, du0dp, G = FiniteVolume.getadjointfunctions(sigma, obsfreenodes, uobs, u0, tspan, Ss, volumes, neighbors, areasoverlengths, loghycos, sources, dirichletnodes, dirichletheads, i->i, true; atol=atol, dt0=dt0)
 
-function dgdu(u, t, p, uobs)
-	uobseval = uobs(t)
-	ueval = u(t)
-	result = zeros(sum(freenodes))
-	for i in obsfreenodes
-		result[i] = 2 * sigma(i, t)^2 * (ueval[freenodei2nodei[i]] - uobseval[freenodei2nodei[i]])
-	end
-	return result
-end
-
-dgdp(u, t, p, uobs) = zeros(length(p))
-
-function dfdp(u, t, p)
-	ueval = u(t)[freenodes]
-	p_loghycos = p[1:length(loghycos)]
-	p_sources = p[length(loghycos) + 1:length(loghycos) + length(sources)]
-	p_dirichletheads = p[length(loghycos) + length(sources) + 1:length(loghycos) + length(sources) + length(dirichletheads)]
-	A_px = FiniteVolume.assembleA_px(ueval, neighbors, areasoverlengths, p_loghycos, p_sources, dirichletnodes, p_dirichletheads, i->i, true)
-	b_p = FiniteVolume.assembleb_p(neighbors, areasoverlengths, p_loghycos, p_sources, dirichletnodes, p_dirichletheads, i->i, true)
-	result = transpose(b_p - A_px)
-	FiniteVolume.scalebyvolume!(result, Ss * volumes, freenodei2nodei)
-	return transpose(result)
-end
-
-@test g(uobs, 0.5 * t1, p0, uobs) == 0
-@test dgdu(t->uobs(t) + 1, 0.5 * t1, p0, uobs) == [i in obsfreenodes ? 2 * sigma(i, 0.5 * t1)^2 : 0.0 for i = 1:sum(freenodes)]
-
-function G(p)
-	p_loghycos = p[1:length(loghycos)]
-	p_sources = p[length(loghycos) + 1:length(loghycos) + length(sources)]
-	p_dirichletheads = p[length(loghycos) + length(sources) + 1:length(loghycos) + length(sources) + length(dirichletheads)]
-	us_p, ts_p = FiniteVolume.backwardeulerintegrate(u0, tspan, Ss, volumes, neighbors, areasoverlengths, p_loghycos, p_sources, dirichletnodes, p_dirichletheads, i->i, true; atol=atol, dt0=dt0)
-	uc_p = FiniteVolume.getcontinuoussolution(us_p, ts_p)
-	I, E = QuadGK.quadgk(t->g(uc_p, t, p, uobs), tspan...; maxevals=3 * 10^2, order=21)
-	return I
-end
+@test g(uobs, 0.5 * t1, uobs) == 0
+@test dgdu(t->uobs(t) + 1, 0.5 * t1, uobs) == [i in obsfreenodes ? 2 * sigma(i, 0.5 * t1)^2 : 0.0 for i = 1:sum(freenodes)]
 
 f_analytical = s->2 * sigma(1, s)^2 * (u_init_analytical(s) - uobs_analytical(s))
-lambdas, ts_lambda = FiniteVolume.adjointintegrate(t->dgdu(uc_init, t, p0, uobs), tspan, Ss, volumes, neighbors, areasoverlengths, p0_hycos, p0_sources, dirichletnodes, p0_dirichletheads, i->i, true; atol=atol, dt0=dt0)
+lambdas, ts_lambda = FiniteVolume.adjointintegrate(t->dgdu(uc_init, t, uobs), tspan, Ss, volumes, neighbors, areasoverlengths, p0_hycos, p0_sources, dirichletnodes, p0_dirichletheads, i->i, true; atol=atol, dt0=dt0)
 lambdac = FiniteVolume.getcontinuoussolution(lambdas, ts_lambda)
 gamma_analytical = t->exp(-e * t) * QuadGK.quadgk(s->exp(e * s) * f_analytical(tspan[2] - s), 0, t)[1]
 lambda_analytical = t->gamma_analytical(tspan[2] - t)
@@ -104,8 +62,7 @@ for (i, t) in enumerate(ts_lambda)
 	@test isapprox(lambdas[i][1], lambda_analytical(t), rtol=1e-4, atol=1e-7)
 end
 
-du0dp = spzeros(length(p0), sum(freenodes))
-dGdp, E = FiniteVolume.gradientintegrate(lambdac, du0dp, t->dgdp(uc_init, t, p0, uobs), t->dfdp(uc_init, t, p0), tspan; maxevals=3 * 10^2, order=21)
+dGdp, E = FiniteVolume.gradientintegrate(lambdac, du0dp, t->dgdp(uc_init, t, p0), t->dfdp(uc_init, t, p0), tspan; maxevals=3 * 10^2, order=21)
 for i in importantindices
 	p0pd = copy(p0)
 	p0pd[i] += deltap

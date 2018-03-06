@@ -18,3 +18,4 @@ h, ch, A, B, freenode = FiniteVolume.solvediffusion(neighbors, areasoverlengths,
 include("ode.jl")
 include("odeadjoint.jl")
 include("theis.jl")
+include("onenodeadjoint.jl")
