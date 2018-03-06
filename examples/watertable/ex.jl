@@ -3,12 +3,32 @@ import JLD
 import LinearAdjoints
 import Optim
 import PyPlot
-import ReusableFunctions
+#import ReusableFunctions
 import PyCall
 @PyCall.pyimport scipy.interpolate as interp
 import PyPlot
 
-@time neighbors, areasoverlengths, dirichletnodes, rechargenodes, xs, ys, zs, topnodes, hycoxs, hycoys, hycozs, tophyconodes = JLD.load("model.jld", "neighbors", "areasoverlengths", "dirichletnodes", "rechargenodes", "xs", "ys", "zs", "topnodes", "hycoxs", "hycoys", "hycozs", "tophyconodes")
+function maker3function(f, dir)
+	if !isdir(dir)
+		mkdir(dir)
+	end
+	function r3f(x...)
+		hashfilename = joinpath(dir, string(hash(x), ".jld"))
+		if isfile(hashfilename)
+			return JLD.load(hashfilename, "result")
+		else
+			result = f(x...)
+			JLD.save(hashfilename, "result", result)
+			return result
+		end
+	end
+end
+
+meshdir = "mesh25"
+#meshdir = "mesh12.5"
+#meshdir = "mesh6.25"
+#@time neighbors, areasoverlengths, dirichletnodes, rechargenodes, xs, ys, zs, topnodes, hycoxs, hycoys, hycozs, tophyconodes = JLD.load("model.jld", "neighbors", "areasoverlengths", "dirichletnodes", "rechargenodes", "xs", "ys", "zs", "topnodes", "hycoxs", "hycoys", "hycozs", "tophyconodes")
+@time neighbors, areasoverlengths, dirichletnodes, rechargenodes, xs, ys, zs, topnodes, hycoxs, hycoys, hycozs, tophyconodes = JLD.load("$meshdir.jld", "neighbors", "areasoverlengths", "dirichletnodes", "rechargenodes", "xs", "ys", "zs", "topnodes", "hycoxs", "hycoys", "hycozs", "tophyconodes")
 numnodes = maximum(map(maximum, neighbors))
 function atantransform(unboundedparams, lowerbounds, upperbounds)
 	return lowerbounds + (upperbounds - lowerbounds) .* (atan.(unboundedparams) / pi + 0.5)
@@ -25,29 +45,36 @@ function atantransformgradient!(gradient, unboundedparams, lowerbounds, upperbou
 end
 
 
-function doopt(hycoregularization, sourceregularization)
+#function doopt(hycoregularization, sourceregularization)
+hycoregularization = 1e-1
+sourceregularization = 1e3
 	hycos0 = 1e-5 * ones(length(neighbors))#m/s
 	sources0 = zeros(numnodes)#m^3/s
-	dirichletheads0 = JLD.load("observations.jld", "dirichletheads0") * 0.3048#convert feet to meters
+	dirichletheads0 = JLD.load("observations_$meshdir.jld", "dirichletheads0") * 0.3048#convert feet to meters
 	x0 = [log.(hycos0); zeros(length(rechargenodes)); dirichletheads0]
 	lowerbounds = [log.(fill(1e-7, length(hycos0))); fill(-1e-5, length(rechargenodes)); dirichletheads0 - 50]
 	upperbounds = [log.(fill(1e-3, length(hycos0))); fill(1e-5, length(rechargenodes)); dirichletheads0 + 50]
 	x0unbounded = tantransform(x0, lowerbounds, upperbounds)
 	@show norm(x0 - atantransform(x0unbounded, lowerbounds, upperbounds))
 
-	obsnodes = JLD.load("observations.jld", "obsnodes")
-	obsvalues = JLD.load("observations.jld", "obsvalues") * 0.3048#convert feet to meters
-	obsxs = JLD.load("observations.jld", "obsxs")
-	obsys = JLD.load("observations.jld", "obsys")
-	obsnames = JLD.load("observations.jld", "obsnames")
+	obsnodes = JLD.load("observations_$meshdir.jld", "obsnodes")
+	obsvalues = JLD.load("observations_$meshdir.jld", "obsvalues") * 0.3048#convert feet to meters
+	obsxs = JLD.load("observations_$meshdir.jld", "obsxs")
+	obsys = JLD.load("observations_$meshdir.jld", "obsys")
+	obsnames = JLD.load("observations_$meshdir.jld", "obsnames")
 	#hycoregularization = 1e0
 	#sourceregularization = 1e3
 	hycocoords = hcat(hycoxs, hycoys, hycozs)'
-	hycoregmat = FiniteVolume.knnregularization(hycocoords, 25)
+	#hycoregmat = FiniteVolume.knnregularization(hycocoords, 25)
+	println("doing regularization")
+	@time hycoregmat = FiniteVolume.knnregularization(hycocoords, 5)
+	println("done with hyco")
 	sourceregmat = FiniteVolume.sourceregularizationmatrix(neighbors, areasoverlengths, dirichletnodes, numnodes)
+	println("done with source")
 
 	@LinearAdjoints.adjoint adjoint FiniteVolume.assembleA FiniteVolume.assembleb objfunc objfunc_x objfunc_p setupsolver
-	r3adjoint = ReusableFunctions.maker3function(adjoint, "restarts_$(hycoregularization)_$(sourceregularization)")
+	#r3adjoint = ReusableFunctions.maker3function(adjoint, "restarts_$(hycoregularization)_$(sourceregularization)")
+	r3adjoint = maker3function(adjoint, "restarts_$(hycoregularization)_$(sourceregularization)")
 
 	function objfunc(u, neighbors, areasoverlengths, hycos, sources, dirichletnodes, dirichletheads)
 		of = 0.0
@@ -113,7 +140,7 @@ function doopt(hycoregularization, sourceregularization)
 			end
 			thesedirichletheads = x[length(neighbors) + length(rechargenodes) + 1:length(neighbors) + length(rechargenodes) + length(dirichletnodes)]
 			@show maximum(thesehycos), extrema(thesesources), extrema(thesedirichletheads)
-			u, of, gradient = r3adjoint(neighbors, areasoverlengths, thesehycos, thesesources, dirichletnodes, thesedirichletheads)
+			@time u, of, gradient = r3adjoint(neighbors, areasoverlengths, thesehycos, thesesources, dirichletnodes, thesedirichletheads)
 			return of
 		end
 
@@ -130,7 +157,7 @@ function doopt(hycoregularization, sourceregularization)
 			end
 			thesedirichletheads = x[length(neighbors) + length(rechargenodes) + 1:length(neighbors) + length(rechargenodes) + length(dirichletnodes)]
 			@show extrema(thesehycos), extrema(thesesources), extrema(thesedirichletheads)
-			u, of, gradient = r3adjoint(neighbors, areasoverlengths, thesehycos, thesesources, dirichletnodes, thesedirichletheads)
+			@time u, of, gradient = r3adjoint(neighbors, areasoverlengths, thesehycos, thesesources, dirichletnodes, thesedirichletheads)
 			storage[1:length(neighbors)] = gradient[1:length(neighbors)] .* thesehycos
 			for (i, node) in enumerate(rechargenodes)
 				storage[length(neighbors) + i] = gradient[length(neighbors) + node]
@@ -142,7 +169,7 @@ function doopt(hycoregularization, sourceregularization)
 			maxgradbc = maximum(abs.(storage[length(neighbors) + length(rechargenodes) + 1:end]))
 			@show maxgradhyco, maxgradsources, maxgradbc
 		end
-		@time opt = Optim.optimize(objfunc, gradient!, x0unbounded, Optim.LBFGS(), Optim.Options(iterations=10, show_trace=true))
+		@time opt = Optim.optimize(objfunc, gradient!, x0unbounded, Optim.LBFGS(), Optim.Options(iterations=200, show_trace=true))
 		JLD.save("optresults/opt_$(hycoregularization)_$(sourceregularization).jld", "optminimizer", opt.minimizer)
 		xunbounded = opt.minimizer
 	else
@@ -156,7 +183,7 @@ function doopt(hycoregularization, sourceregularization)
 		optsources[node] = optrecharge[i]
 	end
 	optdirichletheads = x[length(neighbors) + length(rechargenodes) + 1:length(neighbors) + length(rechargenodes) + length(dirichletnodes)]
-	u, of, gradient = r3adjoint(neighbors, areasoverlengths, opthycos, optsources, dirichletnodes, optdirichletheads)
+	@time u, of, gradient = r3adjoint(neighbors, areasoverlengths, opthycos, optsources, dirichletnodes, optdirichletheads)
 	of = 0.0
 	opthead, freenode, nodei2freenodei = FiniteVolume.freenodes2nodes(u, optsources, dirichletnodes, optdirichletheads)
 	@show norm(obsvalues - opthead[obsnodes])^2
@@ -209,6 +236,8 @@ function doopt(hycoregularization, sourceregularization)
 	for i = 1:size(errormatrix, 1)
 		println(join(errormatrix[i, :], "\t"))
 	end
+	#=
 end
 doopt(1e0, 1e3)
-doopt(1e-1, 1e5)
+#doopt(1e-1, 1e5)
+=#
