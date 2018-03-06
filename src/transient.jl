@@ -155,11 +155,6 @@ function getcontinuoussolution(us, ts)
 	return uc
 end
 
-#we use the notation from Strang's "Computational Science and Engineering"
-#the adjoint equation is dλ/dt=-[df/dt]ᵀ*λ-[dg/du]ᵀ with λ(T)=0
-#we reformulate in terms of γ(t) = gamma(t) = λ(T-t)
-#dγ/dt(t)=[df/dt(T-t)]ᵀ+[dg/du(T-t)]ᵀ
-#the goal is to facilitate the computation of the gradient of ∫g(u,t,p)dt by solving the adjoint equation
 function adjointintegrate(getdgdu::Function, tspan, Ss::Number, volumes::Vector, neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity=false; kwargs...)
 	A = assembleA(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads, metaindex, logtransformconductivity)
 	freenodes, nodei2freenodei = getfreenodes(length(volumes), dirichletnodes)
@@ -168,14 +163,20 @@ function adjointintegrate(getdgdu::Function, tspan, Ss::Number, volumes::Vector,
 	return adjointintegrate(transpose(A), getdgdu, tspan; kwargs...)
 end
 
+#we use the notation from Strang's "Computational Science and Engineering"
+#the adjoint equation is dλ/dt=-[df/du]ᵀ*λ-[dg/du]ᵀ with λ(T)=0, where f=b-Au
+#we reformulate in terms of γ(t) = λ(T-t)
+#dγ/dt(t)=[df/du(T-t)]ᵀ*γ+[dg/du(T-t)]ᵀ
+#the goal is to facilitate the computation of the gradient of ∫g(u,t,p)dt by solving the adjoint equation
 function adjointintegrate(A, getdgdu, tspan; dt0=1.0, kwargs...)
 	gamma0 = zeros(size(A, 2))
-	gammas, tsgamma = backwardeulerintegrate(gamma0, A, getdgdu, dt0, tspan[1], tspan[2]; kwargs...)
+	gammas, tsgamma = backwardeulerintegrate(gamma0, A, t->getdgdu(tspan[2] - t), dt0, tspan[1], tspan[2]; kwargs...)
 	return reverse(gammas), reverse(tspan[2] - tsgamma)#return in terms of λ instead of γ
 end
 
 function gradientintegrate(lambdac, du0dp, dgdp, dfdp, tspan; kwargs...)
-	I, E = QuadGK.quadgk(t->dgdp(t) + dfdp(t) * lambdac(t), tspan...; kwargs...)
-	dGdp = du0dp * lambdac(0) + I
-	return dGdp, E
+	I1, E1 = QuadGK.quadgk(t->dgdp(t), tspan...; kwargs...)
+	I2, E2 = QuadGK.quadgk(t->dfdp(t) * lambdac(t), tspan...; kwargs...)
+	dGdp = du0dp * lambdac(0) + I1 + I2
+	return dGdp, max(E1, E2)
 end
