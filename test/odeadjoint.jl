@@ -28,15 +28,14 @@ function dfdp(xc, t)
 	result[2, 1] = -xc(t)[1]
 	return result
 end
+getdgdu(t) = -ones(1)
 linearsolver(A, b, x0) = A \ b
 x0 = x(0, p)
 xs, ts_x = FiniteVolume.backwardeulerintegrate(x0, -A(p), t->getb(t, p), 1e-5, 0.0, T; linearsolver=linearsolver, atol=1e-8)
 @test isapprox(xs, map(t->x(t, p), ts_x), rtol=1e-4)
-lambdas, ts_lambda = FiniteVolume.adjointintegrate(-A(p), t->-ones(1), (0.0, T); dt0=1e-5, linearsolver=linearsolver, atol=1e-8)
+lambdas, ts_lambda = FiniteVolume.adjointintegrate(-A(p), getdgdu, (0.0, T); dt0=1e-5, linearsolver=linearsolver, atol=1e-8)
 @test isapprox(lambdas, map(t->lambda(t, p), ts_lambda), rtol=1e-4)
-x_itp = Interpolations.interpolate((ts_x,), xs, Interpolations.Gridded(Interpolations.Linear()))
-xc(t) = x_itp[t]
-lambda_itp = Interpolations.interpolate((ts_lambda,), lambdas, Interpolations.Gridded(Interpolations.Linear()))
-lambdac(t) = lambda_itp[t]
-g, E = FiniteVolume.gradientintegrate(lambdac, dx0dp(p), t->[0, 0], t->dfdp(xc, t), (0.0, T))
-@test isapprox(g, gradient(p); rtol=1e-4)
+xc = FiniteVolume.getcontinuoussolution(xs, ts_x)
+lambdac = FiniteVolume.getcontinuoussolution(lambdas, ts_lambda)
+adjointgradient, E = FiniteVolume.gradientintegrate(lambdac, dx0dp(p), t->[0, 0], t->dfdp(xc, t), (0.0, T))
+@test isapprox(adjointgradient, gradient(p); rtol=1e-4)
