@@ -46,3 +46,11 @@ function getadjointfunctions(sigma, obsfreenodes, uobs, u0, tspan, Ss::Number, v
 	end
 	return g, dgdu, dfdp, dgdp, du0dp, G
 end
+
+function integratedfdplambda(u2, p, lambdas, ts_lambda, tspan, Ss::Number, volumes::Vector, neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity=false)
+	p_conductivities = p[1:length(conductivities)]
+	p_sources = p[length(conductivities) + 1:length(conductivities) + length(sources)]
+	p_dirichletheads = p[length(conductivities) + length(sources) + 1:length(conductivities) + length(sources) + length(dirichletheads)]
+	result = FiniteVolume.integrateb_pmA_pxlambda(lambdas, ts_lambda, u2, tspan, Ss, volumes, neighbors, areasoverlengths, p_conductivities, p_sources, dirichletnodes, p_dirichletheads, metaindex, logtransformconductivity)
+	return result
+end

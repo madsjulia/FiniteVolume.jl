@@ -37,5 +37,5 @@ lambdas, ts_lambda = FiniteVolume.adjointintegrate(-A(p), getdgdu, (0.0, T); dt0
 @test isapprox(lambdas, map(t->lambda(t, p), ts_lambda), rtol=1e-4)
 xc = FiniteVolume.getcontinuoussolution(xs, ts_x)
 lambdac = FiniteVolume.getcontinuoussolution(lambdas, ts_lambda)
-adjointgradient, E = FiniteVolume.gradientintegrate(lambdac, dx0dp(p), t->[0, 0], t->dfdp(xc, t), (0.0, T))
+adjointgradient = FiniteVolume.gradientintegrate(lambdac, dx0dp(p), t->[0, 0], t->dfdp(xc, t), (0.0, T))
 @test isapprox(adjointgradient, gradient(p); rtol=1e-4)

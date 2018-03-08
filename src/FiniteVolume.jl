@@ -58,47 +58,6 @@ function sourceregularizationmatrix(neighbors, areasoverlengths, dirichletnodes,
 	return sparse(I, J, V, numnodes, numnodes)
 end
 
-function assemblelowrankAs(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i)
-	LIs = Array{Array{Int, 1}}(length(conductivities))
-	LJs = Array{Array{Int, 1}}(length(conductivities))
-	LVs = Array{Array{Float64, 1}}(length(conductivities))
-	RIs = Array{Array{Int, 1}}(length(conductivities))
-	RJs = Array{Array{Int, 1}}(length(conductivities))
-	RVs = Array{Array{Float64, 1}}(length(conductivities))
-	rankcount = zeros(Int, length(conductivities))
-	for i = 1:length(conductivities)
-		LIs[i] = Int[]
-		LJs[i] = Int[]
-		LVs[i] = Float64[]
-		RIs[i] = Int[]
-		RJs[i] = Int[]
-		RVs[i] = Float64[]
-	end
-	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
-	for (i, (node1, node2)) in enumerate(neighbors)
-		if freenode[node1] && freenode[node2]
-			rankcount[metaindex(i)] += 1
-			LinearAdjoints.addentry(LIs[metaindex(i)], LJs[metaindex(i)], LVs[metaindex(i)], nodei2freenodei[node1], rankcount[metaindex(i)], conductivities[metaindex(i)] * areasoverlengths[i])
-			LinearAdjoints.addentry(LIs[metaindex(i)], LJs[metaindex(i)], LVs[metaindex(i)], nodei2freenodei[node2], rankcount[metaindex(i)], -conductivities[metaindex(i)] * areasoverlengths[i])
-			LinearAdjoints.addentry(RIs[metaindex(i)], RJs[metaindex(i)], RVs[metaindex(i)], rankcount[metaindex(i)], nodei2freenodei[node1], 1.0)
-			LinearAdjoints.addentry(RIs[metaindex(i)], RJs[metaindex(i)], RVs[metaindex(i)], rankcount[metaindex(i)], nodei2freenodei[node2], -1.0)
-		elseif freenode[node1]
-			#@assert metaindex[i] == length(conductivities)
-			rankcount[metaindex(i)] += 1
-			LinearAdjoints.addentry(LIs[metaindex(i)], LJs[metaindex(i)], LVs[metaindex(i)], nodei2freenodei[node1], rankcount[metaindex(i)], conductivities[metaindex(i)] * areasoverlengths[i])
-			LinearAdjoints.addentry(RIs[metaindex(i)], RJs[metaindex(i)], RVs[metaindex(i)], rankcount[metaindex(i)], nodei2freenodei[node1], 1.0)
-		elseif freenode[node2]
-			#@assert metaindex[i] == length(conductivities)
-			rankcount[metaindex(i)] += 1
-			LinearAdjoints.addentry(LIs[metaindex(i)], LJs[metaindex(i)], LVs[metaindex(i)], nodei2freenodei[node2], rankcount[metaindex(i)], conductivities[metaindex(i)] * areasoverlengths[i])
-			LinearAdjoints.addentry(RIs[metaindex(i)], RJs[metaindex(i)], RVs[metaindex(i)], rankcount[metaindex(i)], nodei2freenodei[node2], 1.0)
-		end
-	end
-	Ls = map(i->sparse(LIs[i], LJs[i], LVs[i], sum(freenode), rankcount[i], +), 1:length(conductivities))
-	Rs = map(i->sparse(RIs[i], RJs[i], RVs[i], rankcount[i], sum(freenode), +), 1:length(conductivities))
-	return Ls, Rs
-end
-
 @LinearAdjoints.assemblesparsematrix (conductivities, sources, dirichletheads) u function assembleA(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity::Bool=false)
 	I = Int[]
 	J = Int[]
@@ -287,6 +246,124 @@ function assembleknnregularization(idxs, dists, weightfun)
 		end
 	end
 	return I, J, V
+end
+
+function simpleintegrate(fs, ts)
+	result = similar(fs[1])
+	@. result = 0.5 * ((ts[2] - ts[1]) * fs[1] + (ts[end] - ts[end - 1]) * fs[end])
+	for i = 2:length(ts) - 1
+		@. result += 0.5 * (ts[i + 1] - ts[i - 1]) * fs[i]
+	end
+	return result
+end
+
+function integrateb_pmA_pxlambda(lambdas::Vector{T}, ts_lambda::Vector, u2, tspan, Ss, volumes, neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity::Bool=false) where {T <: AbstractArray}
+	lambda2 = FiniteVolume.getcontinuoussolution(lambdas, ts_lambda, Val{2})
+	lambdac = FiniteVolume.getcontinuoussolution(lambdas, ts_lambda)
+	result = zeros(length(conductivities) + length(sources) + length(dirichletheads))
+	productdict = Dict{Int, Float64}()
+	function integrateproduct(i)
+		if haskey(productdict, i)
+			return productdict[i]
+		else
+			I = QuadGK.quadgk(t->lambda2[i, t] * u2[i, t], tspan[1], tspan[2])[1]
+			productdict[i] = I
+			return I
+		end
+	end
+	lambdaintegral = simpleintegrate(lambdas, ts_lambda)
+	function getlinearindex(::Type{Val{:conductivities}})
+		return 0 + 1
+	end
+	function getlinearindex(::Type{Val{:conductivities}}, indices...)
+		linearindex = 0 + 1
+		for i = 1:length(indices)
+			offset = 1
+			for j = 1:i - 1
+				offset *= size(conductivities, j)
+			end
+			linearindex += (indices[i] - 1) * offset
+		end
+		return linearindex
+	end
+	function getlinearindex(::Type{Val{:sources}})
+		return (0 + length(conductivities)) + 1
+	end
+	function getlinearindex(::Type{Val{:sources}}, indices...)
+		linearindex = (0 + length(conductivities)) + 1
+		for i = 1:length(indices)
+			offset = 1
+			for j = 1:i - 1
+				offset *= size(sources, j)
+			end
+			linearindex += (indices[i] - 1) * offset
+		end
+		return linearindex
+	end
+	function getlinearindex(::Type{Val{:dirichletheads}})
+		return ((0 + length(conductivities)) + length(sources)) + 1
+	end
+	function getlinearindex(::Type{Val{:dirichletheads}}, indices...)
+		linearindex = ((0 + length(conductivities)) + length(sources)) + 1
+		for i = 1:length(indices)
+			offset = 1
+			for j = 1:i - 1
+				offset *= size(dirichletheads, j)
+			end
+			linearindex += (indices[i] - 1) * offset
+		end
+		return linearindex
+	end
+	nodei2dirichleti = getnodei2dirichleti(sources, dirichletnodes)
+	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
+	b = Array{Float64}(sum(freenode))
+	j = 1
+	for i = 1:length(freenode)
+		if freenode[i]
+			#LinearAdjoints.addentry(___la___I, ___la___J, ___la___V, getlinearindex(Val{:sources}, i), j, 1)
+			#result[getlinearindex(Val{:sources}, i)] += lambdaintegrate(j) * Ss * volumes[j]
+			result[getlinearindex(Val{:sources}, i)] += lambdaintegral[j] * Ss * volumes[j]
+			j += 1
+		end
+	end
+	#TODO this loop is slow -- make it faster
+	if logtransformconductivity
+		for (i, (node1, node2)) = enumerate(neighbors)
+			if freenode[node1] && !(freenode[node2])
+				#LinearAdjoints.addentry(___la___I, ___la___J, ___la___V, getlinearindex(Val{:conductivities}, metaindex(i)), nodei2freenodei[node1], exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]])
+				#LinearAdjoints.addentry(___la___I, ___la___J, ___la___V, getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node2]), nodei2freenodei[node1], exp(conductivities[metaindex(i)]) * areasoverlengths[i])
+				#result[getlinearindex(Val{:conductivities}, metaindex(i))] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]] * lambda[nodei2freenodei[node1]] * Ss * volumes[nodei2freenodei[node1]]
+				#result[getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node2])] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * lambda[nodei2freenodei[node1]] * Ss * volumes[nodei2freenodei[node1]]
+				#result[getlinearindex(Val{:conductivities}, metaindex(i))] += (exp(conductivities[metaindex(i)]) * areasoverlengths[i]) * u[nodei2freenodei[node1]] * lambda[nodei2freenodei[node1]] * Ss * volumes[nodei2freenodei[node1]]
+				result[getlinearindex(Val{:conductivities}, metaindex(i))] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]] * lambdaintegral[nodei2freenodei[node1]] * Ss * volumes[nodei2freenodei[node1]]
+				result[getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node2])] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * lambdaintegral[nodei2freenodei[node1]] * Ss * volumes[nodei2freenodei[node1]]
+				result[getlinearindex(Val{:conductivities}, metaindex(i))] += (exp(conductivities[metaindex(i)]) * areasoverlengths[i]) * integrateproduct(nodei2freenodei[node1]) * Ss * volumes[nodei2freenodei[node1]]
+			elseif !(freenode[node1]) && freenode[node2]
+				#LinearAdjoints.addentry(___la___I, ___la___J, ___la___V, getlinearindex(Val{:conductivities}, metaindex(i)), nodei2freenodei[node2], exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]])
+				#LinearAdjoints.addentry(___la___I, ___la___J, ___la___V, getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node1]), nodei2freenodei[node2], exp(conductivities[metaindex(i)]) * areasoverlengths[i])
+				#result[getlinearindex(Val{:conductivities}, metaindex(i))] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]] * lambda[nodei2freenodei[node2]] * Ss * volumes[nodei2freenodei[node2]]
+				#result[getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node1])] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * lambda[nodei2freenodei[node2]] * Ss * volumes[nodei2freenodei[node2]]
+				#result[getlinearindex(Val{:conductivities}, metaindex(i))] += (exp(conductivities[metaindex(i)]) * areasoverlengths[i]) * u[nodei2freenodei[node2]] * lambda[nodei2freenodei[node2]] * Ss * volumes[nodei2freenodei[node2]]
+				result[getlinearindex(Val{:conductivities}, metaindex(i))] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]] * lambdaintegral[nodei2freenodei[node2]] * Ss * volumes[nodei2freenodei[node2]]
+				result[getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node1])] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * lambdaintegral[nodei2freenodei[node2]] * Ss * volumes[nodei2freenodei[node2]]
+				result[getlinearindex(Val{:conductivities}, metaindex(i))] += (exp(conductivities[metaindex(i)]) * areasoverlengths[i]) * integrateproduct(nodei2freenodei[node2]) * Ss * volumes[nodei2freenodei[node2]]
+			end
+		end
+	else
+		error("not supported")
+		#=
+		for (i, (node1, node2)) = enumerate(neighbors)
+			if freenode[node1] && !(freenode[node2])
+				LinearAdjoints.addentry(___la___I, ___la___J, ___la___V, getlinearindex(Val{:conductivities}, metaindex(i)), nodei2freenodei[node1], areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]])
+				LinearAdjoints.addentry(___la___I, ___la___J, ___la___V, getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node2]), nodei2freenodei[node1], conductivities[metaindex(i)] * areasoverlengths[i])
+			elseif !(freenode[node1]) && freenode[node2]
+				LinearAdjoints.addentry(___la___I, ___la___J, ___la___V, getlinearindex(Val{:conductivities}, metaindex(i)), nodei2freenodei[node2], areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]])
+				LinearAdjoints.addentry(___la___I, ___la___J, ___la___V, getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node1]), nodei2freenodei[node2], conductivities[metaindex(i)] * areasoverlengths[i])
+			end
+		end
+		=#
+	end
+	return result
 end
 
 end

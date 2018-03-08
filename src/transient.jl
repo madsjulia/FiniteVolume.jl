@@ -146,10 +146,16 @@ function backwardeulerintegrate(u0, tspan, Ss::Number, volumes::Vector, neighbor
 	return us, ts
 end
 
-function getcontinuoussolution(us, ts)
+function getcontinuoussolution(us::Vector{T}, ts::Vector) where {T <: AbstractArray}
 	itp = Interpolations.interpolate((ts,), us, Interpolations.Gridded(Interpolations.Linear()))
 	uc(t) = itp[t]
 	return uc
+end
+
+function getcontinuoussolution(us::Vector{T}, ts::Vector, ::Type{Val{2}}) where {T <: AbstractArray}
+	u = hcat(us...)
+	itp = Interpolations.interpolate(([i for i = 1:size(u, 1)], ts), u, (Interpolations.NoInterp(), Interpolations.Gridded(Interpolations.Linear())))
+	return itp
 end
 
 function adjointintegrate(getdgdu::Function, tspan, Ss::Number, volumes::Vector, neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity=false; kwargs...)
@@ -171,9 +177,13 @@ function adjointintegrate(A, getdgdu, tspan; dt0=1.0, kwargs...)
 	return reverse(gammas), reverse(tspan[2] - tsgamma)#return in terms of λ instead of γ
 end
 
-function gradientintegrate(lambdac, du0dp, dgdp, dfdp, tspan; kwargs...)
-	I1, E1 = QuadGK.quadgk(t->dgdp(t), tspan...; kwargs...)
+function gradientintegrate(lambdac::Function, du0dp, dgdp, dfdp::Function, tspan; kwargs...)
 	I2, E2 = QuadGK.quadgk(t->dfdp(t) * lambdac(t), tspan...; kwargs...)
-	dGdp = du0dp * lambdac(0) + I1 + I2
-	return dGdp, max(E1, E2)
+	return gradientintegrate(lambdac(0), du0dp, dgdp, I2, tspan; kwargs...)
+end
+
+function gradientintegrate(lambda0::Vector, du0dp, dgdp, integrateddfdplambda::Vector, tspan; kwargs...)
+	I1, E1 = QuadGK.quadgk(t->dgdp(t), tspan...; kwargs...)
+	dGdp = du0dp * lambda0 + I1 + integrateddfdplambda
+	return dGdp
 end

@@ -62,7 +62,7 @@ for (i, t) in enumerate(ts_lambda)
 	@test isapprox(lambdas[i][1], lambda_analytical(t), rtol=1e-4, atol=1e-7)
 end
 
-dGdp, E = FiniteVolume.gradientintegrate(lambdac, du0dp, t->dgdp(uc_init, t, p0), t->dfdp(uc_init, t, p0), tspan; maxevals=3 * 10^2, order=21)
+dGdp = FiniteVolume.gradientintegrate(lambdac, du0dp, t->dgdp(uc_init, t, p0), t->dfdp(uc_init, t, p0), tspan; maxevals=3 * 10^2, order=21)
 for i in importantindices
 	p0pd = copy(p0)
 	p0pd[i] += deltap
