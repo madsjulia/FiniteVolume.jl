@@ -41,7 +41,6 @@ function defaultlinearsolver(A, b, x0)
 		M = PyAMG.aspreconditioner(PyAMG.RugeStubenSolver(A))
 		result, ch = IterativeSolvers.cg!(result, A, b; Pl=M, log=true, maxiter=100)
 	end
-	#result = A \ b
 	return result
 end
 

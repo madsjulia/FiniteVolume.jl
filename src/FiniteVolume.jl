@@ -178,6 +178,16 @@ function fehmhyco2fvhyco(xs, ys, zs, kxs, kys, kzs, neighbors)
 	return ks
 end
 
+function gethycocoords(neighbors, coords)
+	hycocoords = Array{Float64}(size(coords, 1), length(neighbors))
+	for i = 1:length(neighbors)
+		for j = 1:size(coords, 1)
+			hycocoords[j, i] = 0.5 * (coords[j, neighbors[i][1]] + coords[j, neighbors[i][2]])
+		end
+	end
+	return hycocoords
+end
+
 function hycoregularizationmatrix(neighbors, numnodes)
 	I = Int[]
 	J = Int[]
@@ -258,15 +268,16 @@ function simpleintegrate(fs, ts)
 end
 
 function integrateb_pmA_pxlambda(lambdas::Vector{T}, ts_lambda::Vector, u2, tspan, Ss, volumes, neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity::Bool=false) where {T <: AbstractArray}
+	nodei2dirichleti = getnodei2dirichleti(sources, dirichletnodes)
+	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
 	lambda2 = FiniteVolume.getcontinuoussolution(lambdas, ts_lambda, Val{2})
-	lambdac = FiniteVolume.getcontinuoussolution(lambdas, ts_lambda)
 	result = zeros(length(conductivities) + length(sources) + length(dirichletheads))
 	productdict = Dict{Int, Float64}()
 	function integrateproduct(i)
 		if haskey(productdict, i)
 			return productdict[i]
 		else
-			I = QuadGK.quadgk(t->lambda2[i, t] * u2[i, t], tspan[1], tspan[2])[1]
+			I = QuadGK.quadgk(t->lambda2[nodei2freenodei[i], t] * u2[i, t], tspan[1], tspan[2])[1]
 			productdict[i] = I
 			return I
 		end
@@ -314,15 +325,13 @@ function integrateb_pmA_pxlambda(lambdas::Vector{T}, ts_lambda::Vector, u2, tspa
 		end
 		return linearindex
 	end
-	nodei2dirichleti = getnodei2dirichleti(sources, dirichletnodes)
-	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
 	b = Array{Float64}(sum(freenode))
 	j = 1
 	for i = 1:length(freenode)
 		if freenode[i]
 			#LinearAdjoints.addentry(___la___I, ___la___J, ___la___V, getlinearindex(Val{:sources}, i), j, 1)
 			#result[getlinearindex(Val{:sources}, i)] += lambdaintegrate(j) * Ss * volumes[j]
-			result[getlinearindex(Val{:sources}, i)] += lambdaintegral[j] * Ss * volumes[j]
+			result[getlinearindex(Val{:sources}, i)] += lambdaintegral[j] / (Ss * volumes[i])
 			j += 1
 		end
 	end
@@ -335,18 +344,18 @@ function integrateb_pmA_pxlambda(lambdas::Vector{T}, ts_lambda::Vector, u2, tspa
 				#result[getlinearindex(Val{:conductivities}, metaindex(i))] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]] * lambda[nodei2freenodei[node1]] * Ss * volumes[nodei2freenodei[node1]]
 				#result[getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node2])] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * lambda[nodei2freenodei[node1]] * Ss * volumes[nodei2freenodei[node1]]
 				#result[getlinearindex(Val{:conductivities}, metaindex(i))] += (exp(conductivities[metaindex(i)]) * areasoverlengths[i]) * u[nodei2freenodei[node1]] * lambda[nodei2freenodei[node1]] * Ss * volumes[nodei2freenodei[node1]]
-				result[getlinearindex(Val{:conductivities}, metaindex(i))] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]] * lambdaintegral[nodei2freenodei[node1]] * Ss * volumes[nodei2freenodei[node1]]
-				result[getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node2])] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * lambdaintegral[nodei2freenodei[node1]] * Ss * volumes[nodei2freenodei[node1]]
-				result[getlinearindex(Val{:conductivities}, metaindex(i))] += (exp(conductivities[metaindex(i)]) * areasoverlengths[i]) * integrateproduct(nodei2freenodei[node1]) * Ss * volumes[nodei2freenodei[node1]]
+				result[getlinearindex(Val{:conductivities}, metaindex(i))] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node2]] * lambdaintegral[nodei2freenodei[node1]] / (Ss * volumes[nodei2freenodei[node1]])
+				result[getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node2])] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * lambdaintegral[nodei2freenodei[node1]] / (Ss * volumes[nodei2freenodei[node1]])
+				result[getlinearindex(Val{:conductivities}, metaindex(i))] += (exp(conductivities[metaindex(i)]) * areasoverlengths[i]) * integrateproduct(node1) / (Ss * volumes[nodei2freenodei[node1]])
 			elseif !(freenode[node1]) && freenode[node2]
 				#LinearAdjoints.addentry(___la___I, ___la___J, ___la___V, getlinearindex(Val{:conductivities}, metaindex(i)), nodei2freenodei[node2], exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]])
 				#LinearAdjoints.addentry(___la___I, ___la___J, ___la___V, getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node1]), nodei2freenodei[node2], exp(conductivities[metaindex(i)]) * areasoverlengths[i])
 				#result[getlinearindex(Val{:conductivities}, metaindex(i))] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]] * lambda[nodei2freenodei[node2]] * Ss * volumes[nodei2freenodei[node2]]
 				#result[getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node1])] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * lambda[nodei2freenodei[node2]] * Ss * volumes[nodei2freenodei[node2]]
 				#result[getlinearindex(Val{:conductivities}, metaindex(i))] += (exp(conductivities[metaindex(i)]) * areasoverlengths[i]) * u[nodei2freenodei[node2]] * lambda[nodei2freenodei[node2]] * Ss * volumes[nodei2freenodei[node2]]
-				result[getlinearindex(Val{:conductivities}, metaindex(i))] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]] * lambdaintegral[nodei2freenodei[node2]] * Ss * volumes[nodei2freenodei[node2]]
-				result[getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node1])] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * lambdaintegral[nodei2freenodei[node2]] * Ss * volumes[nodei2freenodei[node2]]
-				result[getlinearindex(Val{:conductivities}, metaindex(i))] += (exp(conductivities[metaindex(i)]) * areasoverlengths[i]) * integrateproduct(nodei2freenodei[node2]) * Ss * volumes[nodei2freenodei[node2]]
+				result[getlinearindex(Val{:conductivities}, metaindex(i))] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * dirichletheads[nodei2dirichleti[node1]] * lambdaintegral[nodei2freenodei[node2]] / (Ss * volumes[nodei2freenodei[node2]])
+				result[getlinearindex(Val{:dirichletheads}, nodei2dirichleti[node1])] += exp(conductivities[metaindex(i)]) * areasoverlengths[i] * lambdaintegral[nodei2freenodei[node2]] / (Ss * volumes[nodei2freenodei[node2]])
+				result[getlinearindex(Val{:conductivities}, metaindex(i))] += (exp(conductivities[metaindex(i)]) * areasoverlengths[i]) * integrateproduct(node2) / (Ss * volumes[nodei2freenodei[node2]])
 			end
 		end
 	else

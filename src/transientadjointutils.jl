@@ -35,12 +35,19 @@ function getadjointfunctions(sigma, obsfreenodes, uobs, u0, tspan, Ss::Number, v
 		return dgdpval
 	end
 	du0dp = spzeros(length(conductivities) + length(sources) + length(dirichletheads), sum(freenodes))
-	function G(p)
+	function G(p::Vector)
 		p_conductivities = p[1:length(conductivities)]
 		p_sources = p[length(conductivities) + 1:length(conductivities) + length(sources)]
 		p_dirichletheads = p[length(conductivities) + length(sources) + 1:length(conductivities) + length(sources) + length(dirichletheads)]
 		us_p, ts_p = FiniteVolume.backwardeulerintegrate(u0, tspan, Ss, volumes, neighbors, areasoverlengths, p_conductivities, p_sources, dirichletnodes, p_dirichletheads, metaindex, logtransformconductivity; kwargs...)
 		uc_p = FiniteVolume.getcontinuoussolution(us_p, ts_p)
+		#=
+		I, E = QuadGK.quadgk(t->g(uc_p, t), tspan...; maxevals=3 * 10^2, order=21)
+		return I
+		=#
+		return G(uc_p)
+	end
+	function G(uc_p::Function)
 		I, E = QuadGK.quadgk(t->g(uc_p, t), tspan...; maxevals=3 * 10^2, order=21)
 		return I
 	end
