@@ -1,3 +1,16 @@
+function getnearestgridpoint(x, coords)
+	bestind = 1
+	bestdist = norm(x - coords[:, 1])
+	for i = 1:size(coords, 2)
+		thisdist = norm(x - coords[:, i])
+		if thisdist < bestdist
+			bestind = i
+			bestdist = thisdist
+		end
+	end
+	return bestind
+end
+
 function nodehycos2neighborhycos(neighbors, nodehycos, logtransformhyco=false)
 	n1 = size(nodehycos, 1)
 	n2 = size(nodehycos, 2)

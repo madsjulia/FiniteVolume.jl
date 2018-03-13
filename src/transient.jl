@@ -133,15 +133,22 @@ function backwardeulerintegrate(u0::T, A, getb::Function, dt0, t0::R, tfinal; li
 	return us, ts
 end
 
-function backwardeulerintegrate(u0, tspan, Ss::Number, volumes::Vector, neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity=false; dt0=1.0, kwargs...)
-	A = assembleA(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads, metaindex, logtransformconductivity)
+function backwardeulerintegrate(u0, tspan, Ss::Number, volumes::Vector, neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity=false; kwargs...)
+	freenodes, nodei2freenodei = getfreenodes(length(u0), dirichletnodes)
+	freenodei2nodei = Dict(zip(values(nodei2freenodei), keys(nodei2freenodei)))
 	b = assembleb(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads, metaindex, logtransformconductivity)
+	scalebyvolume!(b, Ss * volumes, freenodei2nodei)
+	getb(t) = b
+	return backwardeulerintegrate(u0, tspan, getb, Ss, volumes, neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads, metaindex, logtransformconductivity; kwargs...)
+end
+
+function backwardeulerintegrate(u0, tspan, getb::Function, Ss::Number, volumes::Vector, neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity=false; dt0=1.0, kwargs...)
+	A = assembleA(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads, metaindex, logtransformconductivity)
 	freenodes, nodei2freenodei = getfreenodes(length(u0), dirichletnodes)
 	freenodei2nodei = Dict(zip(values(nodei2freenodei), keys(nodei2freenodei)))
 	scalebyvolume!(A, Ss * volumes, freenodei2nodei)
-	scalebyvolume!(b, Ss * volumes, freenodei2nodei)
 	u0 = u0[freenodes]
-	us, ts = backwardeulerintegrate(u0, A, b, dt0, tspan[1], tspan[2]; kwargs...)
+	us, ts = backwardeulerintegrate(u0, A, getb, dt0, tspan[1], tspan[2]; kwargs...)
 	us = map(x->freenodes2nodes(x, sources, dirichletnodes, dirichletheads)[1], us)
 	return us, ts
 end
