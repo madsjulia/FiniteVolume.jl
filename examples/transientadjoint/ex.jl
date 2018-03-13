@@ -1,4 +1,15 @@
-using Base.Test
+#=
+if nprocs() == 1
+	machines = ["mads03", "mads04", "mads05", "mads06"]
+	nprocs_per_machine = 64
+	machinenames = []
+	for i = 1:nprocs_per_machine
+		machinenames = [machinenames; machines]
+	end
+	addprocs(machinenames)
+end
+=#
+
 import FiniteVolume
 import GaussianRandomFields
 import Interpolations
@@ -15,7 +26,7 @@ import PyPlot
 	thickness = 10.0#m
 	mins = [-sidelength, -sidelength, 0]
 	maxs = [sidelength, sidelength, thickness]
-	ns = [51, 51, 2]
+	ns = [101, 101, 2]
 	meanloghyco = log(1e-5)#m/s
 	Q = 1e-3#m^3/s
 	Ss = 0.1#m^-1
@@ -65,14 +76,14 @@ import PyPlot
 	obsnodes = map(x->freenodei2nodei[x], obsfreenodes)
 	hycocoords = FiniteVolume.gethycocoords(neighbors, coords)
 	hycoregmat = FiniteVolume.knnregularization(hycocoords, 25)
-	hycoregularization = 1e-1
+	hycoregularization = 1e-2
 
 	function f_and_g_plus(p)
 		bigp = [p; sources; dirichletheads]
 		p_conductivities = p[1:length(loghycos)]
 		starttime = now()
 		function callback()
-			if now() - starttime > Dates.Second(10)
+			if now() - starttime > Dates.Second(30)
 				error("timeout")
 			end
 		end
@@ -81,7 +92,6 @@ import PyPlot
 		try
 			us_p, ts_p = FiniteVolume.backwardeulerintegrate(u0, tspan, Ss, volumes, neighbors, areasoverlengths, p_conductivities, sources, dirichletnodes, dirichletheads, i->i, true; atol=atol, dt0=dt0, callback=callback)
 		catch
-			println("timeout 1")
 			return Inf, fill(NaN, length(p_conductivities)), nothing
 		end
 		uc_p = FiniteVolume.getcontinuoussolution(us_p, ts_p)
@@ -92,7 +102,6 @@ import PyPlot
 		try
 			lambdas, ts_lambda = FiniteVolume.adjointintegrate(t->dgdu(uc_p, t), tspan, Ss, volumes, neighbors, areasoverlengths, p_conductivities, sources, dirichletnodes, dirichletheads, i->i, true; atol=atol, dt0=dt0, callback=callback)
 		catch
-			println("timeout 2")
 			return Inf, fill(NaN, length(p_conductivities)), nothing
 		end
 		idfdplambda = FiniteVolume.integratedfdplambda(uc_p2, bigp, lambdas, ts_lambda, tspan, Ss, volumes, neighbors, areasoverlengths, p_conductivities, sources, dirichletnodes, dirichletheads, i->i, true)
@@ -123,14 +132,14 @@ G_p0pd, _ = f_and_g(p0pd)
 
 function hessian_callback(H, iter)
 	fig, ax = PyPlot.subplots()
-	eigvals = sort(abs.(H.v); rev=true)
+	eigvals = sort(H.v; rev=true)
 	ax[:plot](eigvals, "k.")
 	display(fig)
 	println()
 	PyPlot.close(fig)
 end
 
-@time p_opt, G_opt = MatrixFreeHessianOptimization.quasinewton(f_and_g, p0, 100; maxIter=10, np_lambda=nworkers(), show_trace=true, hessian_callback=hessian_callback)
+@time p_opt, G_opt = MatrixFreeHessianOptimization.quasinewton(f_and_g, p0, 32; lambda_mu=sqrt(2.0), maxIter=5, np_lambda=32, show_trace=true, hessian_callback=hessian_callback)
 @time G_opt, dGdp_opt, uc_opt2 = f_and_g_plus(p_opt)
 
 fig, axs = PyPlot.subplots(sqrtnumobsnodes, sqrtnumobsnodes, sharex=true, sharey=true)
