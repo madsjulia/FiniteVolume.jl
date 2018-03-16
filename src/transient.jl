@@ -74,6 +74,7 @@ function backwardeulertwostep!(rhs, A, getb::Function, u_k, t, dt, linearsolver,
 end
 
 function adaptivebackwardeulerstep!(rhs, A, getb::Function, u_k, t, dt, linearsolver, atol, callback)
+	callback(t, dt)
 	u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, getb, u_k, t, dt, linearsolver, atol)
 	if laststeptime < dt#it couldn't take the step we asked, so try taking smaller steps
 		laststepfailed = true
@@ -81,7 +82,7 @@ function adaptivebackwardeulerstep!(rhs, A, getb::Function, u_k, t, dt, linearso
 		u_elapsedtime = u_k
 		targetdt = laststeptime
 		while elapsedtime < dt
-			callback()
+			callback(t, dt)
 			if laststepfailed#if the last step failed, reuse u_new as the onestep part
 				u_new, laststeptime, increasestepsize = backwardeulertwostep!(rhs, A, getb, u_elapsedtime, t + elapsedtime, targetdt, linearsolver, atol, u_new)
 			else
