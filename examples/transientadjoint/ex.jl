@@ -1,3 +1,4 @@
+#=
 if nprocs() == 1
 	#machines = ["mads03", "mads04", "mads05", "mads06"]
 	machines = ["mads$(lpad(i, 2, 0))" for i = 6:9]
@@ -8,6 +9,7 @@ if nprocs() == 1
 	end
 	addprocs(machinenames)
 end
+=#
 
 import FiniteVolume
 import GaussianRandomFields
@@ -15,6 +17,7 @@ import Interpolations
 import MatrixFreeHessianOptimization
 import QuadGK
 import PyPlot
+using LaTeXStrings
 
 @everywhere begin
 	srand(0)
@@ -25,7 +28,7 @@ import PyPlot
 	thickness = 10.0#m
 	mins = [-sidelength, -sidelength, 0]
 	maxs = [sidelength, sidelength, thickness]
-	ns = [25, 25, 5]
+	ns = [5, 5, 2]
 	meanloghyco = log(1e-5)#m/s
 	Q = 1e-3#m^3/s
 	Ss = 0.1#m^-1
@@ -106,12 +109,7 @@ import PyPlot
 				bidle = FiniteVolume.assembleb(neighbors, areasoverlengths, p_conductivities, zeros(length(sources)), dirichletnodes, dirichletheads, i->i, true)
 				FiniteVolume.scalebyvolume!(bidle, Ss * volumes, freenodei2nodei)
 				getb(t) = t < 60 * 60 * 24 * 3 ? bpumping : bidle
-				try
-					us_p, ts_p = FiniteVolume.backwardeulerintegrate(u0, tspan, getb, Ss, volumes, neighbors, areasoverlengths, p_conductivities, sources, dirichletnodes, dirichletheads, i->i, true; atol=atol, dt0=dt0, callback=callback)
-				catch
-					println("forward timeout")
-					return Inf, fill(NaN, length(p_conductivities)), nothing, nothing
-				end
+				us_p, ts_p = FiniteVolume.backwardeulerintegrate(u0, tspan, getb, Ss, volumes, neighbors, areasoverlengths, p_conductivities, sources, dirichletnodes, dirichletheads, i->i, true; atol=atol, dt0=dt0, callback=callback)
 				uc_p = FiniteVolume.getcontinuoussolution(us_p, ts_p)
 				uc_p2 = FiniteVolume.getcontinuoussolution(us_p, ts_p, Val{2})
 				if savecontinuoussolutions
@@ -119,14 +117,7 @@ import PyPlot
 					push!(uc_p2s, uc_p2)
 				end
 				g, dgdu, dfdp, dgdp, du0dp, G = FiniteVolume.getadjointfunctions(sigma, obsfreenodes, uobss[i], u0, tspan, Ss, volumes, neighbors, areasoverlengths, p_conductivities, sources, dirichletnodes, dirichletheads, i->i, true; atol=atol, dt0=dt0)
-				local lambdas
-				local ts_lambda
-				try
-					lambdas, ts_lambda = FiniteVolume.adjointintegrate(t->dgdu(uc_p, t), tspan, Ss, volumes, neighbors, areasoverlengths, p_conductivities, sources, dirichletnodes, dirichletheads, i->i, true; atol=atol, dt0=dt0, callback=callback)
-				catch
-					println("lambda timeout")
-					return Inf, fill(NaN, length(p_conductivities)), nothing, nothing
-				end
+				lambdas, ts_lambda = FiniteVolume.adjointintegrate(t->dgdu(uc_p, t), tspan, Ss, volumes, neighbors, areasoverlengths, p_conductivities, sources, dirichletnodes, dirichletheads, i->i, true; atol=atol, dt0=dt0, callback=callback)
 				idfdplambda = FiniteVolume.integratedfdplambda(uc_p2, bigp, lambdas, ts_lambda, tspan, Ss, volumes, neighbors, areasoverlengths, p_conductivities, sources, dirichletnodes, dirichletheads, i->i, true)
 				dGdp += FiniteVolume.gradientintegrate(FiniteVolume.getcontinuoussolution(lambdas, ts_lambda), du0dp, t->dgdp(uc_p, t, bigp), t->dfdp(uc_p, t, bigp), tspan; maxevals=3 * 10^2, order=21)
 				dataof += G(uc_p)
@@ -157,15 +148,19 @@ G_p0pd, _ = f_and_g(p0pd)
 
 function hessian_callback(H, iter)
 	fig, ax = PyPlot.subplots()
-	eigvals = sort(H.v; rev=true)
+	eigvals = sort(abs.(H.v); rev=true)
 	ax[:plot](eigvals, "k.")
+	ax[:set_xlabel](L"i")
+	ax[:set_ylabel](L"|\lambda_i|")
 	display(fig)
+	fig[:savefig]("eigenfigs/eigvals_$iter.pdf")
 	println()
 	PyPlot.close(fig)
 end
 
 #@time p_opt, G_opt = MatrixFreeHessianOptimization.quasinewton(f_and_g, p0, div(nworkers(), 2); lambda_mu=sqrt(2.0), maxIter=1, np_lambda=32, show_trace=true, hessian_callback=hessian_callback, lambda=100.0)
-@time p_opt, G_opt = MatrixFreeHessianOptimization.quasinewton(f_and_g, p0, div(nworkers(), 2) - 4; lambda_mu=sqrt(10.0), maxIter=5, np_lambda=16, show_trace=true, hessian_callback=hessian_callback, lambda=1e4)
+#@time p_opt, G_opt = MatrixFreeHessianOptimization.quasinewton(f_and_g, p0, div(nworkers(), 2) - 4; lambda_mu=sqrt(10.0), maxIter=5, np_lambda=16, show_trace=true, hessian_callback=hessian_callback, lambda=1e4)
+@time p_opt, G_opt = MatrixFreeHessianOptimization.quasinewton(f_and_g, p0, 32; lambda_mu=sqrt(10.0), maxIter=1, np_lambda=8, show_trace=true, hessian_callback=hessian_callback, lambda=1e4)
 @time G_opt, dGdp_opt, uc_opt2s, _ = f_and_g_plus(p_opt)
 
 uc_p02 = uc_p02s[div(end, 2)]
