@@ -1,7 +1,8 @@
-using Base.Test
+using Test
 import FiniteVolume
 import GaussianRandomFields
 import Interpolations
+import LinearAlgebra
 
 srand(0)
 doplot = false
@@ -39,7 +40,7 @@ sources[centerindices[2:end - 1]] = -2 * Q / (2 * length(centerindices) - 2)
 dirichletnodes = Int[]
 dirichletheads = Float64[]
 for i = 1:size(coords, 2)
-	if norm(coords[1:2, i]) - sidelength >= 0
+	if LinearAlgebra.norm(coords[1:2, i]) - sidelength >= 0
 		push!(dirichletnodes, i)
 		push!(dirichletheads, steadyhead)
 	end

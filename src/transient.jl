@@ -10,23 +10,36 @@ function scalebyvolume!(b::Vector, volumes, freenodei2nodei)
 	end
 end
 
-function scalebyvolume!(A::SparseMatrixCSC, volumes, freenodei2nodei)
-	rows = rowvals(A)
-	vals = nonzeros(A)
+function scalebyvolume!(A::SparseArrays.SparseMatrixCSC, volumes, freenodei2nodei)
+	rows = SparseArrays.rowvals(A)
+	vals = SparseArrays.nonzeros(A)
 	m, n = size(A)
 	for i = 1:n
-		for j in nzrange(A, i)
+		for j in SparseArrays.nzrange(A, i)
 			vals[j] /= volumes[freenodei2nodei[rows[j]]]
 		end
 	end
 end
 
-function diagonalupdate!(A::SparseMatrixCSC, increment)
-	rows = rowvals(A)
-	vals = nonzeros(A)
+if VERSION >= v"0.7"
+	function scalebyvolume!(A::LinearAlgebra.Transpose{T, S}, volumes, freenodei2nodei) where {T, S <: SparseArrays.SparseMatrixCSC}
+		cols = SparseArrays.rowvals(A.parent)
+		vals = SparseArrays.nonzeros(A.parent)
+		n, m = size(A)
+		for i = 1:n
+			for j in SparseArrays.nzrange(A.parent, i)
+				vals[j] /= volumes[i]
+			end
+		end
+	end
+end
+
+function diagonalupdate!(A::SparseArrays.SparseMatrixCSC, increment)
+	rows = SparseArrays.rowvals(A)
+	vals = SparseArrays.nonzeros(A)
 	m, n = size(A)
 	for i = 1:n
-		for j in nzrange(A, i)
+		for j in SparseArrays.nzrange(A, i)
 			if rows[j] == i#update the diagonal
 				vals[j] += increment
 			end
@@ -65,7 +78,7 @@ end
 function backwardeulertwostep!(rhs, A, getb::Function, u_k, t, dt, linearsolver, atol, onestep=backwardeuleronestep!(rhs, A, getb, u_k, t, dt, linearsolver, atol))
 	twostep1 = backwardeuleronestep!(rhs, A, getb, u_k, t, 0.5 * dt, linearsolver, atol)
 	twostep = backwardeuleronestep!(rhs, A, getb, twostep1, t + 0.5 * dt, 0.5 * dt, linearsolver, atol)
-	err = norm(onestep - twostep)
+	err = LinearAlgebra.norm(onestep - twostep)
 	if err < atol
 		return twostep, dt, err < atol / 4
 	else
@@ -114,7 +127,7 @@ function backwardeulerintegrate(u0::T, A, b::Vector, dt0, t0::R, tfinal; kwargs.
 	return backwardeulerintegrate(u0, A, getb, dt0, t0, tfinal; kwargs...)
 end
 
-function backwardeulerintegrate(u0::T, A, getb::Function, dt0, t0::R, tfinal; linearsolver=defaultlinearsolver, atol=1e-4, callback=()->nothing) where {T,R}
+function backwardeulerintegrate(u0::T, A, getb::Function, dt0, t0::R, tfinal; linearsolver=defaultlinearsolver, atol=1e-4, callback=(t, dt)->nothing) where {T,R}
 	us = T[u0]
 	ts = R[t0]
 	rhs = similar(u0)

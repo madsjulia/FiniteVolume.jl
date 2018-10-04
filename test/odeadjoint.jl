@@ -1,4 +1,4 @@
-using Base.Test
+using Test
 import Interpolations
 
 #this test is based on the closed form example from https://cs.stanford.edu/~ambrad/adjoint_tutorial.pdf

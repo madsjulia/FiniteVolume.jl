@@ -1,12 +1,14 @@
-using Base.Test
+using Test
 import FiniteVolume
 import Interpolations
+import LinearAlgebra
 import QuadGK
+import SparseArrays
 
 #solve dy/dt=-A*y with y(0)=[1, 1, 1], A=diagm([1, 2, 3])
 #the analytical solution is y=[e^-t, e^(-2*t), e^(-3*t)]
 v = [1.0, 2.0, 3.0]
-A = spdiagm(v)
+A = SparseArrays.sparse(LinearAlgebra.Diagonal(v))
 b = zeros(3)
 y0 = [1.0, 1.0, 1.0]
 ys, ts = FiniteVolume.backwardeulerintegrate(y0, A, b, 0.0001, 0.0, 2.0; atol=1e-8)
@@ -18,7 +20,7 @@ end
 
 #solve dy/dt=y+1, y(0)=0, which has solution y(t)=e^x-1
 v = [-1.0]
-A = spdiagm(v)
+A = SparseArrays.sparse(LinearAlgebra.Diagonal(v))
 b = [1.0]
 y0 = [0.0]
 ys, ts = FiniteVolume.backwardeulerintegrate(y0, A, b, 0.0001, 0.0, 1.0; atol=1e-8)

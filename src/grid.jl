@@ -1,8 +1,8 @@
 function getnearestgridpoint(x, coords)
 	bestind = 1
-	bestdist = norm(x - coords[:, 1])
+	bestdist = LinearAlgebra.norm(x - coords[:, 1])
 	for i = 1:size(coords, 2)
-		thisdist = norm(x - coords[:, i])
+		thisdist = LinearAlgebra.norm(x - coords[:, i])
 		if thisdist < bestdist
 			bestind = i
 			bestdist = thisdist
@@ -22,12 +22,9 @@ function nodehycos2neighborhycos(neighbors, nodehycos, logtransformhyco=false)
 		return i1, i2, i3
 	end
 	neighborhycos = Array{Float64}(length(neighbors))
-	hitit = fill(false, size(nodehycos))
 	for i = 1:length(neighborhycos)
 		if logtransformhyco
 			neighborhycos[i] = 0.5 * (nodehycos[multiindex(neighbors[i][1])...] + nodehycos[multiindex(neighbors[i][2])...])
-			hitit[multiindex(neighbors[i][1])...] = true
-			hitit[multiindex(neighbors[i][2])...] = true
 		else
 			neighborhycos[i] = sqrt(nodehycos[multiindex(neighbors[i][1])...] * nodehycos[multiindex(neighbors[i][2])...])
 		end

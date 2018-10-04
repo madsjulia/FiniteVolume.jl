@@ -3,9 +3,14 @@ module FiniteVolume
 import Interpolations
 import IterativeSolvers
 import LinearAdjoints
+if VERSION >= v"0.7"
+	import LinearAlgebra
+	import SparseArrays
+end
 import NearestNeighbors
 #import Preconditioners
 import PyAMG
+#import AlgebraicMultigrid
 import QuadGK
 
 include("grid.jl")
@@ -30,7 +35,7 @@ end
 
 function getfreenodes(n, dirichletnodes)
 	freenode = fill(true, n)
-	freenode[dirichletnodes] = false
+	freenode[dirichletnodes] .= false
 	nodei2freenodei = fill(-1, length(freenode))
 	j = 1
 	for i = 1:length(freenode)
@@ -40,6 +45,19 @@ function getfreenodes(n, dirichletnodes)
 		end
 	end
 	return freenode, nodei2freenodei
+end
+
+function hycoharmonicregularizationmatrix(neighbors, areasoverlengths)
+	I = Int[]
+	J = Int[]
+	V = Float64[]
+	for (i, (node1, node2)) in enumerate(neighbors)
+		LinearAdjoints.addentry(I, J, V, node1, node1, areasoverlengths[i])
+		LinearAdjoints.addentry(I, J, V, node1, node2, -areasoverlengths[i])
+		LinearAdjoints.addentry(I, J, V, node2, node2, areasoverlengths[i])
+		LinearAdjoints.addentry(I, J, V, node2, node1, -areasoverlengths[i])
+	end
+	return SparseArrays.sparse(I, J, V)
 end
 
 function sourceregularizationmatrix(neighbors, areasoverlengths, dirichletnodes, numnodes)
@@ -55,7 +73,7 @@ function sourceregularizationmatrix(neighbors, areasoverlengths, dirichletnodes,
 			LinearAdjoints.addentry(I, J, V, nodei2freenodei[node2], nodei2freenodei[node1], -areasoverlengths[i])
 		end
 	end
-	return sparse(I, J, V, numnodes, numnodes)
+	return SparseArrays.sparse(I, J, V, numnodes, numnodes)
 end
 
 @LinearAdjoints.assemblesparsematrix (conductivities, sources, dirichletheads) u function assembleA(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity::Bool=false)
@@ -90,13 +108,13 @@ end
 			end
 		end
 	end
-	return sparse(I, J, V, sum(freenode), sum(freenode), +)
+	return SparseArrays.sparse(I, J, V, sum(freenode), sum(freenode), +)
 end
 
 @LinearAdjoints.assemblevector (conductivities, sources, dirichletheads) b function assembleb(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector, metaindex=i->i, logtransformconductivity::Bool=false)
 	nodei2dirichleti = getnodei2dirichleti(sources, dirichletnodes)
 	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
-	b = Array{Float64}(sum(freenode))
+	b = Array{Float64}(undef, sum(freenode))
 	j = 1
 	for i = 1:length(freenode)
 		if freenode[i]
@@ -127,7 +145,7 @@ end
 function freenodes2nodes(result, sources, dirichletnodes, dirichletheads)
 	nodei2dirichleti = getnodei2dirichleti(sources, dirichletnodes)
 	freenode, nodei2freenodei = getfreenodes(length(sources), dirichletnodes)
-	head = Array{Float64}(length(sources))
+	head = Array{Float64}(undef, length(sources))
 	freenodessofar = 0
 	for i = 1:length(sources)
 		if freenode[i]
@@ -144,7 +162,21 @@ function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::V
 	A = assembleA(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads)
 	b = assembleb(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads)
 	M = PyAMG.aspreconditioner(PyAMG.RugeStubenSolver(A))
+	#=
+	@show size(A)
+	@show full(A)
+	@show b
+	@show typeof(A)
+	M = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.ruge_stuben(A))
+	println("blah")
+	IterativeSolvers.cg(A, b; Pl=M, log=true, maxiter=maxiter)
+	println("blee")
+	=#
 	result, ch = IterativeSolvers.cg(A, b; Pl=M, log=true, maxiter=maxiter)
+	#=
+	ml = AlgebraicMultigrid.ruge_stuben(A)
+	result = AlgebraicMultigrid.solve(ml, b)
+	=#
 	#=
 	result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=400, restart=400)
 	@time result2 = PyAMG.solve(PyAMG.RugeStubenSolver(A), b, accel="cg", tol=sqrt(eps(Float64)))
@@ -164,7 +196,7 @@ function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::V
 end
 
 function fehmhyco2fvhyco(xs, ys, zs, kxs, kys, kzs, neighbors)
-	ks = Array{eltype(kxs)}(length(neighbors))
+	ks = Array{eltype(kxs)}(undef, length(neighbors))
 	for i = 1:length(neighbors)
 		node1, node2 = neighbors[i]
 		dx = xs[node1] - xs[node2]
@@ -179,7 +211,7 @@ function fehmhyco2fvhyco(xs, ys, zs, kxs, kys, kzs, neighbors)
 end
 
 function gethycocoords(neighbors, coords)
-	hycocoords = Array{Float64}(size(coords, 1), length(neighbors))
+	hycocoords = Array{Float64}(undef, size(coords, 1), length(neighbors))
 	for i = 1:length(neighbors)
 		for j = 1:size(coords, 1)
 			hycocoords[j, i] = 0.5 * (coords[j, neighbors[i][1]] + coords[j, neighbors[i][2]])
@@ -220,12 +252,12 @@ function hycoregularizationmatrix(neighbors, numnodes)
 			end
 		end
 	end
-	return sparse(I, J, V, length(neighbors), length(neighbors), +)
+	return SparseArrays.sparse(I, J, V, length(neighbors), length(neighbors), +)
 end
 
 function knnregularization(coords, numneighbors, weightfun=h->1 / h)
 	I, J, V = innerknnregularization(coords, numneighbors, weightfun)
-	return sparse(I, J, V, size(coords, 2) * numneighbors, size(coords, 2))
+	return SparseArrays.sparse(I, J, V, size(coords, 2) * numneighbors, size(coords, 2))
 end
 
 function innerknnregularization(coords, numneighbors, weightfun=h->1 / h)
@@ -236,9 +268,9 @@ end
 
 function assembleknnregularization(idxs, dists, weightfun)
 	numneighbors = length(idxs[1]) - 1
-	I = Array{Int}(2 * length(idxs) * numneighbors)
-	J = Array{Int}(2 * length(idxs) * numneighbors)
-	V = Array{Float64}(2 * length(idxs) * numneighbors)
+	I = Array{Int}(undef, 2 * length(idxs) * numneighbors)
+	J = Array{Int}(undef, 2 * length(idxs) * numneighbors)
+	V = Array{Float64}(undef, 2 * length(idxs) * numneighbors)
 	k = 1
 	eqnum = 1
 	for i = 1:length(idxs)
@@ -325,7 +357,7 @@ function integrateb_pmA_pxlambda(lambdas::Vector{T}, ts_lambda::Vector, u2, tspa
 		end
 		return linearindex
 	end
-	b = Array{Float64}(sum(freenode))
+	b = Array{Float64}(undef, sum(freenode))
 	j = 1
 	for i = 1:length(freenode)
 		if freenode[i]
