@@ -169,7 +169,7 @@ end
 
 function getcontinuoussolution(us::Vector{T}, ts::Vector) where {T <: AbstractArray}
 	itp = Interpolations.interpolate((ts,), us, Interpolations.Gridded(Interpolations.Linear()))
-	uc(t) = itp[t]
+	uc(t) = itp(t)
 	return uc
 end
 
@@ -195,7 +195,7 @@ end
 function adjointintegrate(A, getdgdu, tspan; dt0=1.0, kwargs...)
 	gamma0 = zeros(size(A, 2))
 	gammas, tsgamma = backwardeulerintegrate(gamma0, A, t->getdgdu(tspan[2] - t), dt0, tspan[1], tspan[2]; kwargs...)
-	return reverse(gammas), reverse(tspan[2] - tsgamma)#return in terms of λ instead of γ
+	return reverse(gammas), reverse(tspan[2] .- tsgamma)#return in terms of λ instead of γ
 end
 
 function gradientintegrate(lambdac::Function, du0dp, dgdp, dfdp::Function, tspan; kwargs...)

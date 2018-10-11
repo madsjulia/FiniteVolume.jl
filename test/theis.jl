@@ -39,7 +39,7 @@ for i = 1:size(coords, 2)
 end
 sources[centerindices[1]] = -Q / (2 * length(centerindices) - 2)
 sources[centerindices[end]] = -Q / (2 * length(centerindices) - 2)
-sources[centerindices[2:end - 1]] = -2 * Q / (2 * length(centerindices) - 2)
+sources[centerindices[2:end - 1]] .= -2 * Q / (2 * length(centerindices) - 2)
 dirichletnodes = Int[]
 dirichletheads = Float64[]
 for i = 1:size(coords, 2)
@@ -58,8 +58,8 @@ goodnodes = collect(filter(i->coords[3, i] == thickness && coords[2, i] == 0 && 
 rs = coords[1, goodnodes]
 T = thickness * k
 theisdrawdowns = theisdrawdown.(ts[end], rs, T, S, Q)
-modeldrawdowns = -us[end][goodnodes] + steadyhead
+modeldrawdowns = -us[end][goodnodes] .+ steadyhead
 @test isapprox(theisdrawdowns, modeldrawdowns, atol=1e-4, rtol=2e-2)
 thiemdrawdowns = thiemdrawdown.(rs, T, Q, sidelength)
-steadydrawdowns = -usteady[goodnodes] + steadyhead
+steadydrawdowns = -usteady[goodnodes] .+ steadyhead
 @test isapprox(thiemdrawdowns, steadydrawdowns, atol=1e-4, rtol=2e-2)

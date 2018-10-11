@@ -58,17 +58,17 @@ function regulargrid(mins, maxs, ns)
 	@assert length(mins) == length(ns)
 	length(mins) == 3 || error("only 3 dimensions supported")
 	linearindex = (i1, i2, i3)->i3 + ns[3] * (i2 - 1) + ns[3] * ns[2] * (i1 - 1)
-	coords = Array{Float64}(3, prod(ns))
-	xs = linspace(mins[1], maxs[1], ns[1])
-	ys = linspace(mins[2], maxs[2], ns[2])
-	zs = linspace(mins[3], maxs[3], ns[3])
+	coords = Array{Float64}(undef, 3, prod(ns))
+	xs = range(mins[1]; stop=maxs[1], length=ns[1])
+	ys = range(mins[2]; stop=maxs[2], length=ns[2])
+	zs = range(mins[3]; stop=maxs[3], length=ns[3])
 	dx = xs[2] - xs[1]
 	dy = ys[2] - ys[1]
 	dz = zs[2] - zs[1]
 	j = 1
-	neighbors = Array{Pair{Int, Int}}(3 * prod(ns) - ns[1] * ns[2] - ns[1] * ns[3] - ns[2] * ns[3])
-	areasoverlengths = Array{Float64}(3 * prod(ns) - ns[1] * ns[2] - ns[1] * ns[3] - ns[2] * ns[3])
-	volumes = Array{Float64}(0)
+	neighbors = Array{Pair{Int, Int}}(undef, 3 * prod(ns) - ns[1] * ns[2] - ns[1] * ns[3] - ns[2] * ns[3])
+	areasoverlengths = Array{Float64}(undef, 3 * prod(ns) - ns[1] * ns[2] - ns[1] * ns[3] - ns[2] * ns[3])
+	volumes = Array{Float64}(undef, 0)
 	for i1 = 1:ns[1]
 		areadx = xs[2] - xs[1]
 		if i1 == 1 || i1 == ns[1]#don't include the area outside the domain
@@ -110,9 +110,9 @@ function regulargrid(mins, maxs, ns)
 end
 
 function makeinterpolant(mins, maxs, ns, h)
-	xs = linspace(mins[1], maxs[1], ns[1])
-	ys = linspace(mins[2], maxs[2], ns[2])
-	zs = linspace(mins[3], maxs[3], ns[3])
+	xs = range(mins[1]; stop=maxs[1], length=ns[1])
+	ys = range(mins[2]; stop=maxs[2], length=ns[2])
+	zs = range(mins[3]; stop=maxs[3], length=ns[3])
 	itp = Interpolations.interpolate((zs, ys, xs), reshape(h, length(zs), length(ys), length(xs)), Interpolations.Gridded(Interpolations.Linear()))
 	return (x, y, z)->itp[z, y, x]
 end

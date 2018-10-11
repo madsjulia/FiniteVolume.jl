@@ -3,8 +3,10 @@ import FiniteVolume
 import GaussianRandomFields
 import Interpolations
 import LinearAlgebra
+import Random
+import SparseArrays
 
-srand(0)
+Random.seed!(0)
 doplot = false
 
 atol = 1e-4
@@ -20,11 +22,11 @@ Ss = 0.1#m^-1
 sigma = (i, t)->0.03#m
 coords, neighbors, areasoverlengths, volumes = FiniteVolume.regulargrid(mins, maxs, ns)
 
-xs = linspace(mins[1], maxs[1], ns[1])
-ys = linspace(mins[2], maxs[2], ns[2])
-zs = linspace(mins[3], maxs[3], ns[3])
+xs = range(mins[1]; stop=maxs[1], length=ns[1])
+ys = range(mins[2]; stop=maxs[2], length=ns[2])
+zs = range(mins[3]; stop=maxs[3], length=ns[3])
 grf = GaussianRandomFields.GaussianRandomField(GaussianRandomFields.CovarianceFunction(3, GaussianRandomFields.Matern(10.0, 2.0)), GaussianRandomFields.CirculantEmbedding(), xs, ys, zs)
-nodeloghycos = GaussianRandomFields.sample(grf) + meanloghyco
+nodeloghycos = GaussianRandomFields.sample(grf) .+ meanloghyco
 #loghycos = FiniteVolume.nodehycos2neighborhycos(neighbors, nodeloghycos, true)
 loghycos = fill(meanloghyco + 1, length(neighbors))
 sources = zeros(size(coords, 2))
@@ -36,7 +38,7 @@ for i = 1:size(coords, 2)
 end
 sources[centerindices[1]] = -Q / (2 * length(centerindices) - 2)
 sources[centerindices[end]] = -Q / (2 * length(centerindices) - 2)
-sources[centerindices[2:end - 1]] = -2 * Q / (2 * length(centerindices) - 2)
+sources[centerindices[2:end - 1]] .= -2 * Q / (2 * length(centerindices) - 2)
 dirichletnodes = Int[]
 dirichletheads = Float64[]
 for i = 1:size(coords, 2)
@@ -65,7 +67,7 @@ obsfreenodes = map(i->nodei2freenodei[i], obsnodes)
 
 g, dgdu, dfdp, dgdp, du0dp, G = FiniteVolume.getadjointfunctions(sigma, obsfreenodes, uobs, u0, tspan, Ss, volumes, neighbors, areasoverlengths, p0[1:length(loghycos)], sources, dirichletnodes, dirichletheads, i->i, true; atol=atol, dt0=60.0)
 lambdas, ts_lambda = FiniteVolume.adjointintegrate(t->dgdu(uc_init, t), tspan, Ss, volumes, neighbors, areasoverlengths, p0[1:length(loghycos)], sources, dirichletnodes, dirichletheads, i->i, true; atol=atol, dt0=60.0)
-du0dp = spzeros(length(p0), sum(freenodes))
+du0dp = SparseArrays.spzeros(length(p0), sum(freenodes))
 idfdplambda = FiniteVolume.integratedfdplambda(uc_init2, p0, lambdas, ts_lambda, tspan, Ss, volumes, neighbors, areasoverlengths, p0[1:length(loghycos)], sources, dirichletnodes, dirichletheads, i->i, true)
 dGdp = FiniteVolume.gradientintegrate(lambdas[1], du0dp, t->dgdp(uc_init, t, p0), idfdplambda, tspan; maxevals=3 * 10^2, order=21)
 

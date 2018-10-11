@@ -10,7 +10,7 @@ end
 import NearestNeighbors
 #import Preconditioners
 import PyAMG
-#import AlgebraicMultigrid
+import AlgebraicMultigrid
 import QuadGK
 
 include("grid.jl")
@@ -162,21 +162,8 @@ function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::V
 	A = assembleA(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads)
 	b = assembleb(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads)
 	M = PyAMG.aspreconditioner(PyAMG.RugeStubenSolver(A))
-	#=
-	@show size(A)
-	@show full(A)
-	@show b
-	@show typeof(A)
-	M = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.ruge_stuben(A))
-	println("blah")
-	IterativeSolvers.cg(A, b; Pl=M, log=true, maxiter=maxiter)
-	println("blee")
-	=#
+	#M = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.ruge_stuben(A))
 	result, ch = IterativeSolvers.cg(A, b; Pl=M, log=true, maxiter=maxiter)
-	#=
-	ml = AlgebraicMultigrid.ruge_stuben(A)
-	result = AlgebraicMultigrid.solve(ml, b)
-	=#
 	#=
 	result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=400, restart=400)
 	@time result2 = PyAMG.solve(PyAMG.RugeStubenSolver(A), b, accel="cg", tol=sqrt(eps(Float64)))
@@ -309,7 +296,7 @@ function integrateb_pmA_pxlambda(lambdas::Vector{T}, ts_lambda::Vector, u2, tspa
 		if haskey(productdict, i)
 			return productdict[i]
 		else
-			I = QuadGK.quadgk(t->lambda2[nodei2freenodei[i], t] * u2[i, t], tspan[1], tspan[2])[1]
+			I = QuadGK.quadgk(t->lambda2(nodei2freenodei[i], t) * u2(i, t), tspan[1], tspan[2])[1]
 			productdict[i] = I
 			return I
 		end

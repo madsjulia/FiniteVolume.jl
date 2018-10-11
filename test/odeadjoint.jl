@@ -18,7 +18,7 @@ gradient(p) = [1 / p[2] * (exp(p[2] * T) - 1), -p[1] / p[2]^2 * (exp(p[2] * T) -
 A = p->fill(p[2], 1, 1)
 getb(t, p) = zeros(1)
 function dx0dp(p)
-	result = Array{Float64}(2, 1)
+	result = Array{Float64}(undef, 2, 1)
 	result[1, 1] = -1.0
 	result[2, 1] = 0
 	return result
@@ -34,7 +34,7 @@ x0 = x(0, p)
 xs, ts_x = FiniteVolume.backwardeulerintegrate(x0, -A(p), t->getb(t, p), 1e-5, 0.0, T; linearsolver=linearsolver, atol=1e-8)
 @test isapprox(xs, map(t->x(t, p), ts_x), rtol=1e-4)
 lambdas, ts_lambda = FiniteVolume.adjointintegrate(-A(p), getdgdu, (0.0, T); dt0=1e-5, linearsolver=linearsolver, atol=1e-8)
-@test isapprox(lambdas, map(t->lambda(t, p), ts_lambda), rtol=1e-4)
+@test isapprox(map(x->x[1], lambdas), map(t->lambda(t, p), ts_lambda), rtol=1e-4)
 xc = FiniteVolume.getcontinuoussolution(xs, ts_x)
 lambdac = FiniteVolume.getcontinuoussolution(lambdas, ts_lambda)
 adjointgradient = FiniteVolume.gradientintegrate(lambdac, dx0dp(p), t->[0, 0], t->dfdp(xc, t), (0.0, T))

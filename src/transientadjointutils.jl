@@ -34,7 +34,7 @@ function getadjointfunctions(sigma, obsfreenodes, uobs, u0, tspan, Ss::Number, v
 	function dgdp(u, t, p)
 		return dgdpval
 	end
-	du0dp = spzeros(length(conductivities) + length(sources) + length(dirichletheads), sum(freenodes))
+	du0dp = SparseArrays.spzeros(length(conductivities) + length(sources) + length(dirichletheads), sum(freenodes))
 	function G(p::Vector)
 		p_conductivities = p[1:length(conductivities)]
 		p_sources = p[length(conductivities) + 1:length(conductivities) + length(sources)]
