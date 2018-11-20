@@ -21,7 +21,7 @@ function nodehycos2neighborhycos(neighbors, nodehycos, logtransformhyco=false)
 		i1 = div(k - i3 - (i2 - 1) * n3, n3 * n2) + 1
 		return i1, i2, i3
 	end
-	neighborhycos = Array{Float64}(length(neighbors))
+	neighborhycos = Array{Float64}(undef, length(neighbors))
 	for i = 1:length(neighborhycos)
 		if logtransformhyco
 			neighborhycos[i] = 0.5 * (nodehycos[multiindex(neighbors[i][1])...] + nodehycos[multiindex(neighbors[i][2])...])

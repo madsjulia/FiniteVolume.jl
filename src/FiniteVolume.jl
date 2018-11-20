@@ -309,8 +309,8 @@ function integrateb_pmA_pxlambda(lambdas::Vector{T}, ts_lambda::Vector, u2, tspa
 		linearindex = 0 + 1
 		for i = 1:length(indices)
 			offset = 1
-			for j = 1:i - 1
-				offset *= size(conductivities, j)
+			for i2 = 1:i - 1
+				offset *= size(conductivities, i2)
 			end
 			linearindex += (indices[i] - 1) * offset
 		end
@@ -323,8 +323,8 @@ function integrateb_pmA_pxlambda(lambdas::Vector{T}, ts_lambda::Vector, u2, tspa
 		linearindex = (0 + length(conductivities)) + 1
 		for i = 1:length(indices)
 			offset = 1
-			for j = 1:i - 1
-				offset *= size(sources, j)
+			for i2 = 1:i - 1
+				offset *= size(sources, i2)
 			end
 			linearindex += (indices[i] - 1) * offset
 		end
@@ -337,8 +337,8 @@ function integrateb_pmA_pxlambda(lambdas::Vector{T}, ts_lambda::Vector, u2, tspa
 		linearindex = ((0 + length(conductivities)) + length(sources)) + 1
 		for i = 1:length(indices)
 			offset = 1
-			for j = 1:i - 1
-				offset *= size(dirichletheads, j)
+			for i2 = 1:i - 1
+				offset *= size(dirichletheads, i2)
 			end
 			linearindex += (indices[i] - 1) * offset
 		end
