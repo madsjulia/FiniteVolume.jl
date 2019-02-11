@@ -12,14 +12,14 @@ function getnearestgridpoint(x, coords)
 end
 
 function nodehycos2neighborhycos(neighbors, nodehycos, logtransformhyco=false)
-	n1 = size(nodehycos, 1)
+	n1 = size(nodehycos, 3)
 	n2 = size(nodehycos, 2)
-	n3 = size(nodehycos, 3)
+	n3 = size(nodehycos, 1)
 	function multiindex(k)
 		i3 = mod(k - 1, n3) + 1
 		i2 = mod(div(k - i3, n3), n2) + 1
 		i1 = div(k - i3 - (i2 - 1) * n3, n3 * n2) + 1
-		return i1, i2, i3
+		return i3, i2, i1
 	end
 	neighborhycos = Array{Float64}(undef, length(neighbors))
 	for i = 1:length(neighborhycos)
@@ -39,8 +39,8 @@ function neighborhycos2nodehycos(neighbors, neighborhycos, ns)
 		i1 = div(k - i3 - (i2 - 1) * ns[3], ns[3] * ns[2]) + 1
 		return i1, i2, i3
 	end
-	nodehycos = ones(Float64, ns...)
-	neighborcount = zeros(Int, ns...)
+	nodehycos = zeros(Float64, ns[3], ns[2], ns[3])
+	neighborcount = zeros(Int, ns[3], ns[2], ns[3])
 	for i = 1:length(neighborhycos)
 		#neighborhycos[i] = sqrt(nodehycos[multiindex(neighbors[i][1])...] * nodehycos[multiindex(neighbors[i][2])...])
 		nodehycos[multiindex(neighbors[i][1])...] += neighborhycos[i]
