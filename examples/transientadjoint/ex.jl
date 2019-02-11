@@ -11,16 +11,20 @@ if nprocs() == 1
 end
 =#
 
-import FiniteVolume
-import GaussianRandomFields
-import Interpolations
-import MatrixFreeHessianOptimization
-import QuadGK
-import PyPlot
-using LaTeXStrings
+Distributed.@everywhere begin
+	import Distributed
+	import FiniteVolume
+	import GaussianRandomFields
+	import Interpolations
+	import LinearAlgebra
+	import MatrixFreeHessianOptimization
+	import QuadGK
+	import PyPlot
+	import Random
+	import Statistics
+	using LaTeXStrings
 
-@everywhere begin
-	srand(0)
+	Random.seed!(0)
 	dt0 = 60.0
 	atol = 1e0
 	steadyhead = 1e1
@@ -36,11 +40,11 @@ using LaTeXStrings
 	sigma = (i, t)->sigmaval#m
 	coords, neighbors, areasoverlengths, volumes = FiniteVolume.regulargrid(mins, maxs, ns)
 
-	xs = linspace(mins[1], maxs[1], ns[1])
-	ys = linspace(mins[2], maxs[2], ns[2])
-	zs = linspace(mins[3], maxs[3], ns[3])
+	xs = range(mins[1]; stop=maxs[1], length=ns[1])
+	ys = range(mins[2]; stop=maxs[2], length=ns[2])
+	zs = range(mins[3]; stop=maxs[3], length=ns[3])
 	grf = GaussianRandomFields.GaussianRandomField(GaussianRandomFields.CovarianceFunction(3, GaussianRandomFields.Matern(10.0, 2.0)), GaussianRandomFields.CirculantEmbedding(), xs, ys, zs)
-	loghycos = GaussianRandomFields.sample(grf) + meanloghyco
+	loghycos = GaussianRandomFields.sample(grf) .+ meanloghyco
 	dirichletnodes = Int[]
 	dirichletheads = Float64[]
 	for i = 1:size(coords, 2)
@@ -57,16 +61,17 @@ using LaTeXStrings
 	p0 = fill(meanloghyco, length(loghycos))
 	p_true = loghycos[1:end]
 	sqrtnumobsnodes = 3
-	obsxs = linspace(-sidelength, sidelength, sqrtnumobsnodes + 2)[2:end - 1]
-	obsys = linspace(-sidelength, sidelength, sqrtnumobsnodes + 2)[2:end - 1]
-	obszs = linspace(0, thickness, 4)[2:end - 1]
+	obsxs = range(-sidelength; stop=sidelength, length=sqrtnumobsnodes + 2)[2:end - 1]
+	obsys = range(-sidelength; stop=sidelength, length=sqrtnumobsnodes + 2)[2:end - 1]
+	obszs = range(0; stop=thickness, length=4)[2:end - 1]
 	numobsnodes = length(obsxs) * length(obsys) * length(obszs)
 	uobss = fill(t->zeros(length(volumes)), numobsnodes)#we need to define uobs before calling f_and_g_plus
-	obsnodes = Array{Int}(numobsnodes)
-	i = 1
+	obsnodes = Array{Int}(undef, numobsnodes)
+	obsnodecount = 1
 	for z in obszs, y in obsys, x in obsxs
-		obsnodes[i] = FiniteVolume.getnearestgridpoint([x, y, z], coords)
-		i += 1
+		global obsnodecount
+		obsnodes[obsnodecount] = FiniteVolume.getnearestgridpoint([x, y, z], coords)
+		obsnodecount += 1
 	end
 	freenodes, nodei2freenodei = FiniteVolume.getfreenodes(length(u0), dirichletnodes)
 	freenodei2nodei = Dict(zip(values(nodei2freenodei), keys(nodei2freenodei)))
@@ -116,8 +121,8 @@ using LaTeXStrings
 				end
 				dataof += G(uc_p)
 			end
-			hycoregof = hycoregularization * norm(hycoregmat * p)^2
-			dGdp += (2 * hycoregularization) * At_mul_B(hycoregmat, (hycoregmat * p))
+			hycoregof = hycoregularization * LinearAlgebra.norm(hycoregmat * p)^2
+			dGdp += (2 * hycoregularization) * transpose(hycoregmat) * (hycoregmat * p)
 		end
 		return dataof + hycoregof, dGdp, uc_p2s, uc_ps
 	end
@@ -132,12 +137,11 @@ end
 @time G_p0, dGdp_p0, uc_p02s, _ = f_and_g_plus(p0)
 
 #check that the gradient is legit
-i = indmax(abs.(dGdp_p0))
 deltap = 1e-6
 p0pd = copy(p0)
-p0pd[i] += deltap
+p0pd[argmax(abs.(dGdp_p0))] += deltap
 G_p0pd, _ = f_and_g(p0pd)
-@show dGdp_p0[i]
+@show dGdp_p0[argmax(abs.(dGdp_p0))]
 @show (G_p0pd - G_p0) / deltap
 
 function hessian_callback(H, iter)
@@ -154,7 +158,7 @@ end
 
 #@time p_opt, G_opt = MatrixFreeHessianOptimization.quasinewton(f_and_g, p0, div(nworkers(), 2); lambda_mu=sqrt(2.0), maxIter=1, np_lambda=32, show_trace=true, hessian_callback=hessian_callback, lambda=100.0)
 #@time p_opt, G_opt = MatrixFreeHessianOptimization.quasinewton(f_and_g, p0, div(nworkers(), 2) - 4; lambda_mu=sqrt(10.0), maxIter=5, np_lambda=16, show_trace=true, hessian_callback=hessian_callback, lambda=1e4)
-@time p_opt, G_opt = MatrixFreeHessianOptimization.quasinewton(f_and_g, p0, 32; lambda_mu=sqrt(10.0), maxIter=5, np_lambda=8, show_trace=true, hessian_callback=hessian_callback, lambda=1e4)
+@time p_opt, G_opt = MatrixFreeHessianOptimization.quasinewton(f_and_g, p0, 60; lambda_mu=sqrt(10.0), maxIter=10, np_lambda=12, show_trace=true, hessian_callback=hessian_callback, lambda=1e4)
 @time G_opt, dGdp_opt, uc_opt2s, _ = f_and_g_plus(p_opt)
 
 function plotfits(wellnum=div(length(uobs2s), 2); saveresults=false)
@@ -162,12 +166,12 @@ function plotfits(wellnum=div(length(uobs2s), 2); saveresults=false)
 	uobs2 = uobs2s[wellnum]
 	uc_opt2 = uc_opt2s[wellnum]
 	fig, axs = PyPlot.subplots(sqrtnumobsnodes, 2 * sqrtnumobsnodes, sharex=true, sharey=false, figsize=(16, 9))
-	ts = linspace(tspan[1], tspan[2], 101)
+	ts = range(tspan[1]; stop=tspan[2], length=101)
 	for i = 1:numobsnodes
 		ax = axs[i]
-		ax[:plot](ts, map(t->uc_p02[obsnodes[i], t], ts), label="u(p0)", alpha=0.5)
-		ax[:plot](ts, map(t->uc_opt2[obsnodes[i], t], ts), label="opt", alpha=0.5)
-		ax[:plot](ts, map(t->uobs2[obsnodes[i], t], ts), label="obs", alpha=0.5)
+		ax[:plot](ts, map(t->uc_p02(obsnodes[i], t), ts), label="u(p0)", alpha=0.5)
+		ax[:plot](ts, map(t->uc_opt2(obsnodes[i], t), ts), label="opt", alpha=0.5)
+		ax[:plot](ts, map(t->uobs2(obsnodes[i], t), ts), label="obs", alpha=0.5)
 	end
 	axs[end][:legend]()
 	fig[:tight_layout]()
@@ -184,14 +188,14 @@ plotfits(; saveresults=true)
 function plothycos(zfrac=0.5)
 	hycoitp = Interpolations.interpolate((xs, ys, zs), reshape(p_true, length(xs), length(ys), length(zs)), Interpolations.Gridded(Interpolations.Linear()))
 	hycoitp_opt = Interpolations.interpolate((xs, ys, zs), reshape(p_opt, length(xs), length(ys), length(zs)), Interpolations.Gridded(Interpolations.Linear()))
-	plotxs = linspace(mins[1], maxs[1], 50)
-	plotys = linspace(mins[2], maxs[2], 50)
-	hyco_imgdata = Array{Float64}(length(plotys), length(plotxs))
-	hyco_imgdata_opt = Array{Float64}(length(plotys), length(plotxs))
+	plotxs = range(mins[1]; stop=maxs[1], length=50)
+	plotys = range(mins[2]; stop=maxs[2], length=50)
+	hyco_imgdata = Array{Float64}(undef, length(plotys), length(plotxs))
+	hyco_imgdata_opt = Array{Float64}(undef, length(plotys), length(plotxs))
 	for (i, x) in enumerate(plotxs)
 		for (j, y) in enumerate(plotys)
-			hyco_imgdata[size(hyco_imgdata, 1) + 1 - j, i] = hycoitp[x, y, zfrac * thickness]
-			hyco_imgdata_opt[size(hyco_imgdata, 1) + 1 - j, i] = hycoitp_opt[x, y, zfrac * thickness]
+			hyco_imgdata[size(hyco_imgdata, 1) + 1 - j, i] = hycoitp(x, y, zfrac * thickness)
+			hyco_imgdata_opt[size(hyco_imgdata, 1) + 1 - j, i] = hycoitp_opt(x, y, zfrac * thickness)
 		end
 	end
 	fig, axs = PyPlot.subplots(1, 2, figsize=(16,9))
@@ -233,4 +237,4 @@ for i = 1:ns[3]
 	plothycosraw(i)
 end
 
-@show cor(p_opt, p_true)
+@show Statistics.cor(p_opt, p_true)
