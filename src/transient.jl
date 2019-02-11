@@ -51,7 +51,7 @@ function defaultlinearsolver(A, b, x0)
 	result = copy(x0)
 	result, ch = IterativeSolvers.cg!(result, A, b; log=true, maxiter=100)
 	if !ch.isconverged#if it didn't converge without preconditioning, try it with preconditioning
-		M = PyAMG.aspreconditioner(PyAMG.RugeStubenSolver(A))
+		M = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.ruge_stuben(A))
 		result, ch = IterativeSolvers.cg!(result, A, b; Pl=M, log=true, maxiter=100)
 	end
 	return result
@@ -127,14 +127,20 @@ function backwardeulerintegrate(u0::T, A, b::Vector, dt0, t0::R, tfinal; kwargs.
 	return backwardeulerintegrate(u0, A, getb, dt0, t0, tfinal; kwargs...)
 end
 
-function backwardeulerintegrate(u0::T, A, getb::Function, dt0, t0::R, tfinal; linearsolver=defaultlinearsolver, atol=1e-4, callback=(t, dt)->nothing) where {T,R}
+function fixedbackwardeulerstep!(rhs, A, getb::Function, u_k, t, dt, linearsolver, atol, callback)
+	callback(t, dt)
+	u_new = backwardeuleronestep!(rhs, A, getb, u_k, t, dt, linearsolver, atol)
+	return u_new, dt, false
+end
+
+function backwardeulerintegrate(u0::T, A, getb::Function, dt0, t0::R, tfinal; stepper! = adaptivebackwardeulerstep!, linearsolver=defaultlinearsolver, atol=1e-4, callback=(t, dt)->nothing) where {T,R}
 	us = T[u0]
 	ts = R[t0]
 	rhs = similar(u0)
 	A = copy(A)
 	dt = min(dt0, tfinal - t0)
 	while ts[end] < tfinal
-		solution, laststeptime, increasestepsize = adaptivebackwardeulerstep!(rhs, A, getb, us[end], ts[end], dt, linearsolver, atol, callback)
+		solution, laststeptime, increasestepsize = stepper!(rhs, A, getb, us[end], ts[end], dt, linearsolver, atol, callback)
 		push!(us, solution)
 		push!(ts, ts[end] + dt)
 		if increasestepsize

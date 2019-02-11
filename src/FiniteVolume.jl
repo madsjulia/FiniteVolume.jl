@@ -3,13 +3,9 @@ module FiniteVolume
 import Interpolations
 import IterativeSolvers
 import LinearAdjoints
-if VERSION >= v"0.7"
-	import LinearAlgebra
-	import SparseArrays
-end
+import LinearAlgebra
+import SparseArrays
 import NearestNeighbors
-#import Preconditioners
-import PyAMG
 import AlgebraicMultigrid
 import QuadGK
 
@@ -161,23 +157,9 @@ end
 function solvediffusion(neighbors::Array{Pair{Int, Int}, 1}, areasoverlengths::Vector, conductivities::Vector, sources::Vector, dirichletnodes::Array{Int, 1}, dirichletheads::Vector; maxiter=400)
 	A = assembleA(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads)
 	b = assembleb(neighbors, areasoverlengths, conductivities, sources, dirichletnodes, dirichletheads)
-	M = PyAMG.aspreconditioner(PyAMG.RugeStubenSolver(A))
-	#M = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.ruge_stuben(A))
+	M = AlgebraicMultigrid.aspreconditioner(AlgebraicMultigrid.ruge_stuben(A))
 	result, ch = IterativeSolvers.cg(A, b; Pl=M, log=true, maxiter=maxiter)
-	#=
-	result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=400, restart=400)
-	@time result2 = PyAMG.solve(PyAMG.RugeStubenSolver(A), b, accel="cg", tol=sqrt(eps(Float64)))
-	@time result3 = PyAMG.solve(PyAMG.RugeStubenSolver(A, accel="cg"), b, tol=sqrt(eps(Float64)))
-	@time result4 = PyAMG.solve(PyAMG.SmoothedAggregationSolver(A, accel="cg"), b, tol=sqrt(eps(Float64)))
-	@show norm(A * result - b)
-	@show norm(A * result2 - b)
-	@show norm(A * result3 - b)
-	@show norm(A * result4 - b)
-	=#
-	#=
-	@time iL, iU = Preconditioners.ilu0(A)
-	@time result, ch = IterativeSolvers.gmres(A, b; Pl=iL, Pr=iU, log=true, maxiter=400, restart=400)
-	=#
+	#result, ch = IterativeSolvers.gmres(A, b; Pl=M, log=true, maxiter=400, restart=400)
 	head, freenode, nodei2freenodei = freenodes2nodes(result, sources, dirichletnodes, dirichletheads)
 	return head, ch, A, b, freenode
 end
