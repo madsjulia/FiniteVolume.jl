@@ -1,0 +1,8 @@
+Interpolations
+IterativeSolvers
+LinearAdjoints
+LinearAlgebra
+SparseArrays
+NearestNeighbors
+AlgebraicMultigrid
+QuadGK
