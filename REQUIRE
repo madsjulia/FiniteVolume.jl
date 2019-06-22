@@ -6,3 +6,4 @@ SparseArrays
 NearestNeighbors
 AlgebraicMultigrid
 QuadGK
+GaussianRandomFields
