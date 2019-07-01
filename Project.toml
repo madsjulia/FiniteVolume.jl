@@ -1,0 +1,16 @@
+name = "FiniteVolume"
+uuid = "3a64a3ec-9c17-11e9-2293-53eea12f1f5e"
+authors = ["Daniel O'Malley <omalled@lanl.gov>"]
+version = "0.1.0"
+
+[deps]
+AlgebraicMultigrid = "2169fc97-5a83-5252-b627-83903c6c433c"
+GaussianRandomFields = "e4b2fa32-6e09-5554-b718-106ed5adafe9"
+Interpolations = "a98d9a8b-a2ab-59e6-89dd-64a1c18fca59"
+IterativeSolvers = "42fd0dbc-a981-5370-80f2-aaf504508153"
+LinearAdjoints = "15eb0ba9-8092-56af-9473-024e039f0e65"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+NearestNeighbors = "b8a86587-4115-5ab1-83bc-aa920d37bbce"
+QuadGK = "1fd47b50-473d-5c70-9696-f719f8f3bcdc"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SparseArrays = "2f01184e-e22b-5df5-ae63-d93ebab69eaf"
